@@ -33,7 +33,7 @@ This repo was started from the same author's 어전회의 (eojeon) project and f
 ```
 npm run setup     # npm install + npx playwright install chromium (needs internet)
 npm run check     # syntax of every script + index.html script list (offline, a second)
-npm test          # node tests/e2e.mjs — 58 Playwright tests (Chromium runs with a fake microphone);
+npm test          # node tests/e2e.mjs — 62 Playwright tests (Chromium runs with a fake microphone);
                   # Claude / OpenAI / Gemini / YouTube oEmbed are all mocked, so no keys or network are needed
 ```
 Codex sandboxes usually have no network while the agent runs: do `npm run setup` in the environment's setup
@@ -51,7 +51,8 @@ the app chose by wrapping `HS.download`.
 | `assets/board.js` | Board line syntax (`HS.parseBoardLine`), chalkboard background, `HS.drawBoardSlide` (with `progress` for the writing animation), `HS.boardChars` |
 | `assets/scene-art.js` | Procedural mood backgrounds for scenes without an image (`HS.drawSceneArt`) |
 | `assets/scene-kinds.js` | History scene types drawn instead of a picture: `source` (scroll, original text written vertically + translation + citation), `timeline`, `people` (relationship diagram), `compare` (two-column table). `HS.drawDataScene(ctx,w,h,scene,k)` animates by progress k; `HS.sceneKind`, `HS.needsPicture`, `HS.kindToText/textToKind` (editor line formats) |
-| `assets/shots.js` | Core image feature. Shot lists per scene (`scene.shots`), art style + cast sheet (`project.art`), `HS.planShotsAI` / `HS.planShotsSimple`, `HS.shotPrompt` (style + shot + cast looks + aspect + no-text), `HS.shotStarts`/`HS.drawShots` (switch shots at narration sentences, crossfade), map shots drawn with the illustrated map, image order sheet ZIP for Codex/ChatGPT (`HS.exportImageOrder`, file names `S03-2_<id>.png`), `HS.importShotFiles` (match by file name) |
+| `assets/shots.js` | Core image feature. Shot lists per scene (`scene.shots`), art style + cast sheet (`project.art`), `HS.planShotsAI` / `HS.planShotsSimple`, `HS.shotPrompt` (style + shot + cast looks + aspect + no-text), `HS.shotStarts`/`HS.drawShots` (switch shots at narration sentences, crossfade), map shots drawn with the illustrated map, image order sheet ZIP for Codex/ChatGPT (`HS.exportImageOrder`, file names `S03-2_<id>.png`), `HS.importShotFiles` (match by file name), `HS.setShotImage` (previous image kept in `shot.candidates`, max 6), `HS.pickCandidate`, `HS.revisePrompt(shot, feedback)` (Claude rewrites the English prompt from Korean feedback), order-sheet modes `missing|all|redo|selected` |
+| `assets/queue.js` | Image queue (`HS.Q`, `HS.enqueueShots(ids, variants)`, `HS.queueStart/Pause/RetryFailed/ClearDone/SetConcurrency`, `HS.queueIdle`): concurrency 1–3, retries 429/5xx twice, pauses everything on 401/403. In-memory per window |
 | `assets/shots-ui.js` | 🎨 이미지 tab (style, cast, plan, order sheet, import, shot board) |
 | `assets/image-gen.js` | Raster scene images from OpenAI (`/v1/images/generations`, default `gpt-image-1`) or Google Gemini (`generateContent` with `responseModalities: ['IMAGE']`, default `gemini-2.5-flash-image`); key in `hs.imgKey`; `HS.drawSceneImage(i)` → `scene.image` |
 | `assets/ai-art.js` | Claude-drawn SVG illustrations in 3 layers (`far/mid/near`) for parallax; `HS.cleanSvg` sanitizes (no script/image/text/external refs) |
@@ -78,7 +79,7 @@ the app chose by wrapping `HS.download`.
 { version, id, title, aspect('16:9'|'9:16'), source, sourceFiles:[{name, mediaType, data(base64), size}], refs:[{id, title, url, channel, transcript, role(fact|style)}], options:{length,audience,tone}, mapStyle,
   bgm:{name, data(dataURL), dur, volume, duck}|null,
   art:{style(webtoon|ink|oil|textbook|minhwa|docu), extra, cast:[{name, look}]},
-  scenes:[{heading, narration, visual, prompt, mood, motion, shots:[{id(4 chars), type(wide|scene|portrait|closeup|map), desc, prompt, sentence, places[], image}], kind(illust|map|source|timeline|people|compare), useMap(= kind is map),
+  scenes:[{heading, narration, visual, prompt, mood, motion, shots:[{id(4 chars), type(wide|scene|portrait|closeup|map), desc, prompt, sentence, places[], image, candidates[], redo, feedback}], kind(illust|map|source|timeline|people|compare), useMap(= kind is map),
            data:{original, translation, cite, events[{year,label}], people[{name,role}], links[{from,to,label}], left, right, rows[{label,left,right}]},
            caption, transition(fade|ink|wipe|cut), keywords[] (yellow in subtitles), character:{id, side}|null,
            image(dataURL|null), svg(string|null), audio(dataURL|null), audioDur, dur(seconds override|null)}],

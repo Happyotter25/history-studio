@@ -100,6 +100,7 @@
       // 대본의 프롬프트에서 화풍·금지 문구는 걷어 냅니다 (화풍은 이미지 탭에서 정한 것을 씀)
       var base = String(s.prompt || '').replace(/Korean history webtoon illustration,?\s*(soft painterly,?)?\s*/i, '').replace(/,?\s*(historically accurate costume and architecture|no text|no watermark)/gi, '').trim();
       var pr = i === 0 ? 'Atmospheric establishing illustration for a Korean history video titled "' + (p.title || s.heading) + '": period landscape and architecture, sense of drama'
+        : /^Depict this moment/i.test(base) ? base
         : 'Depict this moment from Korean history: ' + (sents[0] || s.heading) + (base && base !== s.heading ? ' (' + base + ')' : '');
       shots.push({ id: newId(), type: i === 0 ? 'wide' : 'scene', desc: s.visual && s.visual !== '제목 화면' ? s.visual : s.heading + ' 전경', prompt: pr, sentence: 0, places: [], image: null });
       // 지명이 나오는 문장이 있으면 그 문장에서 그림 지도로
@@ -161,14 +162,56 @@
   HS.firstShotImage = function(s){ var r = HS.readyShots(s).filter(function(x){ return x.image; })[0]; return r ? r.image : null; };
 
   /* ── 이미지 주문서 (Codex·ChatGPT 등 구독 도구용) ──────────── */
-  HS.pendingShots = function(all){
+  // mode: 'missing'(그림 없음 + 다시 그릴 것) | 'all' | 'redo'(다시 그릴 것만) | 'selected'(ids 에 든 것)
+  HS.pendingShots = function(mode, ids){
+    if(mode === true) mode = 'all'; if(!mode) mode = 'missing';
     var out = [];
-    P().scenes.forEach(function(s, i){ (s.shots || []).forEach(function(sh, j){ if(sh.type !== 'map' && (all || !sh.image)) out.push({ si: i, sj: j, s: s, sh: sh }); }); });
+    P().scenes.forEach(function(s, i){ (s.shots || []).forEach(function(sh, j){
+      if(sh.type === 'map') return;
+      var take = mode === 'all' ? true : mode === 'redo' ? !!sh.redo : mode === 'selected' ? (ids || []).indexOf(sh.id) >= 0 : (!sh.image || !!sh.redo);
+      if(take) out.push({ si: i, sj: j, s: s, sh: sh });
+    }); });
     return out;
   };
-  HS.exportImageOrder = function(all, noDownload){
-    var p = P(), list = HS.pendingShots(all);
-    if(!list.length) return Promise.reject(new Error(all ? '샷이 없습니다. 먼저 이미지 기획을 하세요' : '만들 그림이 없습니다 (모두 채워졌거나 샷이 없음)'));
+  HS.findShot = function(id){
+    var hit = null;
+    P().scenes.forEach(function(s, i){ (s.shots || []).forEach(function(sh, j){ if(sh.id === id) hit = { si: i, sj: j, s: s, sh: sh }; }); });
+    return hit;
+  };
+  // 새 그림을 넣습니다. 전 그림은 후보로 남겨 되돌릴 수 있게 합니다 (샷마다 최근 6장)
+  var MAX_CAND = 6;
+  HS.setShotImage = function(sh, u){
+    if(sh.image && sh.image !== u){
+      sh.candidates = (sh.candidates || []).filter(function(c){ return c !== sh.image && c !== u; });
+      sh.candidates.unshift(sh.image);
+      sh.candidates = sh.candidates.slice(0, MAX_CAND);
+    }
+    sh.image = u; sh.redo = false;
+  };
+  HS.pickCandidate = function(sh, k){
+    var c = (sh.candidates || [])[k]; if(!c) return;
+    sh.candidates.splice(k, 1);
+    if(sh.image) sh.candidates.unshift(sh.image);
+    sh.image = c; HS.changed('shots');
+  };
+  // 마음에 안 드는 점(한국어)을 받아 영어 프롬프트를 고칩니다. Claude 키가 없으면 요청을 덧붙입니다
+  HS.revisePrompt = function(sh, feedback){
+    feedback = String(feedback || '').trim();
+    if(!feedback) return Promise.resolve(sh.prompt);
+    if(!HS.CFG.key){
+      sh.prompt = (sh.prompt || sh.desc || '') + '\nRevision request: ' + feedback;
+      HS.changed('shots'); return Promise.resolve(sh.prompt);
+    }
+    var sys = '너는 이미지 프롬프트 수정 담당이다. 역사 영상 삽화의 영어 프롬프트와, 그 그림에 대한 선생님의 고칠 점(한국어)을 받는다. ' +
+      '고칠 점을 반영한 새 영어 프롬프트를 쓴다. 원래 장면의 뜻과 시대 고증은 지키고, 화풍 말과 "글자 없음" 같은 문구는 넣지 않는다(앱이 붙인다).';
+    return HS.callClaude(sys, [{ role: 'user', content: '원래 프롬프트:\n' + (sh.prompt || '') + '\n\n장면 설명: ' + (sh.desc || '') + '\n\n고칠 점: ' + feedback }],
+      { type: 'object', additionalProperties: false, required: ['prompt'], properties: { prompt: { type: 'string' } } }, null, 'low')
+      .then(function(r){ sh.prompt = r.data.prompt; HS.changed('shots'); return sh.prompt; });
+  };
+  HS.exportImageOrder = function(mode, noDownload, ids){
+    if(mode === true) mode = 'all'; if(!mode) mode = 'missing';
+    var p = P(), list = HS.pendingShots(mode, ids);
+    if(!list.length) return Promise.reject(new Error(mode === 'all' ? '샷이 없습니다. 먼저 이미지 기획을 하세요' : mode === 'selected' ? '고른 샷이 없습니다' : mode === 'redo' ? '다시 그리기로 표시한 샷이 없습니다' : '만들 그림이 없습니다 (모두 채워졌거나 샷이 없음)'));
     var portrait = p.aspect === '9:16', size = portrait ? '1024x1536' : '1536x1024';
     var items = list.map(function(x){
       return { file: HS.shotFile(x.si, x.sj, x.sh), scene: x.si + 1, shot: x.sj + 1, heading: x.s.heading, type: TYPES[x.sh.type], desc_ko: x.sh.desc, size: size, aspect: portrait ? '9:16' : '16:9', prompt: HS.shotPrompt(x.sh) };
@@ -228,14 +271,14 @@
         return chain.then(function(){
           var sh = HS.matchShotFile(f.name);
           if(!sh){ miss.push(f.name); return; }
-          return HS.readFile(f).then(function(u){ return HS.shrinkImage(u, 1920); }).then(function(u){ sh.image = u; ok++; });
+          return HS.readFile(f).then(function(u){ return HS.shrinkImage(u, 1920); }).then(function(u){ HS.setShotImage(sh, u); ok++; });
         });
       }, Promise.resolve()).then(function(){ HS.changed('shots'); return { ok: ok, miss: miss }; });
   };
 
   // 이미지 API 키가 있으면 샷을 바로 만듭니다
   HS.generateShotImage = function(sh){
-    return HS.generateImage(HS.shotPrompt(sh), P().aspect).then(function(u){ return HS.shrinkImage(u, 1920); }).then(function(u){ sh.image = u; HS.changed('shots'); return u; });
+    return HS.generateImage(HS.shotPrompt(sh), P().aspect).then(function(u){ return HS.shrinkImage(u, 1920); }).then(function(u){ HS.setShotImage(sh, u); HS.changed('shots'); return u; });
   };
   HS.shotStats = function(){
     var n = 0, done = 0;

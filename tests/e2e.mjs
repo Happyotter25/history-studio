@@ -77,6 +77,7 @@ function answerFor(body) {
   if (sys.includes('업로드 정보')) return UPLOAD_ANSWER;
   if (sys.includes('수업 설계자')) return LESSON_ANSWER;
   if (sys.includes('미술 감독')) return SHOTS_ANSWER;
+  if (sys.includes('이미지 프롬프트 수정')) return { prompt: 'REVISED darker night scene of ' + (body.messages[0].content.match(/고칠 점: (.*)/) || ['', ''])[1] };
   return AI_ANSWER;
 }
 
@@ -1036,6 +1037,134 @@ await test('샷 그림을 이미지 API로 만들 때 화풍·인물이 든 프�
   await ai.waitForFunction(() => !!HS.project.scenes[0].shots[0].image);
   assert.ok(req.prompt.startsWith('Style: traditional Korean ink-wash') && req.prompt.includes('Myeongnyang strait'));
   await ai.evaluate(() => HS.saveImageSettings('', '', ''));
+});
+
+// 이미지 API 가짜: 요청을 기록하고, 프롬프트에 따라 실패·붐빔을 흉내 냅니다
+const IMG = { live: 0, max: 0, reqs: [], status: {} };
+async function imageRoute(ctx) {
+  await ctx.unroute('https://api.openai.com/v1/images/generations');
+  // 요청마다 다른 그림(색)을 돌려줍니다 — 실제 서비스처럼 매번 새 그림
+  const pngs = await ai.evaluate(() => Array.from({ length: 24 }, (_, i) => { const c = document.createElement('canvas'); c.width = 64; c.height = 36; const x = c.getContext('2d'); x.fillStyle = 'hsl(' + i * 15 + ',70%,50%)'; x.fillRect(0, 0, 64, 36); return c.toDataURL('image/png').split(',')[1]; }));
+  let k = 0;
+  await ctx.route('https://api.openai.com/v1/images/generations', async route => {
+    const body = JSON.parse(route.request().postData());
+    IMG.reqs.push(body.prompt); IMG.live++; IMG.max = Math.max(IMG.max, IMG.live);
+    await new Promise(r => setTimeout(r, 150));
+    IMG.live--;
+    const key = Object.keys(IMG.status).find(k => body.prompt.includes(k));
+    if (key && IMG.status[key].length) { const st = IMG.status[key].shift(); return route.fulfill({ status: st, headers: { 'content-type': 'application/json', 'access-control-allow-origin': '*' }, body: JSON.stringify({ error: { message: 'mock ' + st } }) }); }
+    await route.fulfill({ status: 200, headers: { 'content-type': 'application/json', 'access-control-allow-origin': '*' }, body: JSON.stringify({ data: [{ b64_json: pngs[k++ % pngs.length] }] }) });
+  });
+}
+
+await test('다시 그리기: 고칠 점을 Claude가 프롬프트에 반영해 다시 그리고, 전 그림은 후보로 남아 되돌릴 수 있다', async () => {
+  await imageRoute(ai.context());
+  await ai.evaluate(() => HS.saveImageSettings('openai', 'k', ''));
+  await ai.click('#tabs button[data-tab=video]'); await ai.click('#tabs button[data-tab=shots]');
+  const before = await ai.evaluate(() => HS.project.scenes[2].shots[0].image);
+  const card = '#shots-board .shot[data-id="' + await ai.evaluate(() => HS.project.scenes[2].shots[0].id) + '"]';
+  await ai.click(card + ' button[data-act=redo]');
+  await ai.fill(card + ' textarea[data-fb]', '밤 장면으로 더 어둡게');
+  await ai.selectOption(card + ' select[data-var]', '2');
+  const n = IMG.reqs.length;
+  await ai.click(card + ' button[data-act=redo-now]');
+  await ai.waitForFunction(() => (HS.project.scenes[2].shots[0].candidates || []).length >= 2 && HS.queueCounts().run === 0 && HS.queueCounts().wait === 0);
+  const r = await ai.evaluate(() => { const sh = HS.project.scenes[2].shots[0]; return { prompt: sh.prompt, cands: sh.candidates.length, image: sh.image }; });
+  assert.ok(r.prompt.startsWith('REVISED darker night scene of 밤 장면으로 더 어둡게'), r.prompt);
+  assert.equal(IMG.reqs.length - n, 2, '후보 2장이면 요청 2번');
+  assert.ok(IMG.reqs[n].includes('REVISED') && IMG.reqs[n].startsWith('Style:'));
+  assert.equal(r.cands, 2, '처음 그림 + 첫 후보가 남아야 함');
+  assert.notEqual(r.image, before);
+  // 후보를 누르면 그 그림으로 바뀌고, 지금 그림은 후보로
+  await ai.click(card + ' .cands img[data-cand="1"]');
+  const back = await ai.evaluate(() => ({ image: HS.project.scenes[2].shots[0].image, n: HS.project.scenes[2].shots[0].candidates.length }));
+  assert.equal(back.image, before, '처음 그림으로 돌아가야 함');
+  assert.equal(back.n, 2);
+});
+
+await test('대기열: 고른 샷을 한 번에, 동시에 2장씩 만들고, 붐빔은 다시 시도하고, 실패한 것만 다시 한다', async () => {
+  await ai.evaluate(() => {
+    // 샷 3개를 더 만들어 그림 없이 둡니다 (하나는 늘 실패, 하나는 한 번 붐빔)
+    const s = HS.project.scenes[0];
+    s.shots = s.shots.slice(0, 1).concat([
+      { id: 'qaa1', type: 'scene', desc: 'A', prompt: 'QUEUE-A calm river', sentence: 0, places: [], image: null },
+      { id: 'qbb2', type: 'scene', desc: 'B', prompt: 'QUEUE-B BUSY once', sentence: 0, places: [], image: null },
+      { id: 'qcc3', type: 'scene', desc: 'C', prompt: 'QUEUE-C FAILME', sentence: 0, places: [], image: null }]);
+    HS.changed('shots');
+  });
+  IMG.status = { 'BUSY once': [429], FAILME: [400, 400, 400, 400] };
+  IMG.max = 0;
+  await ai.evaluate(() => { HS.Q.items = []; });
+  await ai.click('#tabs button[data-tab=video]'); await ai.click('#tabs button[data-tab=shots]');
+  await ai.click('#sel-none');
+  for (const id of ['qaa1', 'qbb2', 'qcc3']) await ai.check('#shots-board .shot[data-id="' + id + '"] input[data-sel]');
+  assert.match(await ai.textContent('#sel-count'), /3개 고름/);
+  await ai.selectOption('#q-conc', '2').catch(() => {});
+  await ai.evaluate(() => HS.queueSetConcurrency(2));
+  await ai.selectOption('#batch-variants', '2');
+  await ai.click('#batch-queue');
+  await ai.waitForSelector('#queue-badge:not([hidden])');
+  await ai.evaluate(() => HS.queueIdle());
+  const c = await ai.evaluate(() => HS.queueCounts());
+  assert.deepEqual([c.ok, c.fail], [2, 1], JSON.stringify(c));
+  assert.equal(IMG.max, 2, '동시에 2장까지만');
+  const got = await ai.evaluate(() => ['qaa1', 'qbb2', 'qcc3'].map(id => { const f = HS.findShot(id).sh; return [!!f.image, (f.candidates || []).length]; }));
+  assert.deepEqual(got, [[true, 1], [true, 1], [false, 0]], '후보 2장이면 그림 1 + 후보 1');
+  assert.match(await ai.textContent('#q-list'), /실패.*mock 400/);
+  // 원인을 고치고(프롬프트) 실패한 것만 다시
+  IMG.status = {};
+  await ai.click('#q-retry');
+  await ai.evaluate(() => HS.queueIdle());
+  assert.equal(await ai.evaluate(() => !!HS.findShot('qcc3').sh.image), true);
+  await ai.click('#q-clear');
+  assert.equal(await ai.evaluate(() => HS.Q.items.length), 0);
+  assert.ok(await ai.isHidden('#queue-badge'));
+});
+
+await test('대기열: 키가 틀리면(401) 나머지를 멈추고, 키가 없으면 시작하지 않는다', async () => {
+  IMG.status = { 'QUEUE-A': [401] };
+  await ai.evaluate(() => { HS.Q.items = []; });
+  await ai.evaluate(() => { ['qaa1', 'qbb2'].forEach(id => { HS.findShot(id).sh.image = null; }); HS.queueSetConcurrency(1); HS.enqueueShots(['qaa1', 'qbb2'], 1); HS.queueStart(); });
+  await ai.evaluate(() => HS.queueIdle());
+  const c = await ai.evaluate(() => ({ counts: HS.queueCounts(), paused: HS.Q.paused }));
+  assert.equal(c.paused, true);
+  assert.deepEqual([c.counts.fail, c.counts.wait], [1, 1], JSON.stringify(c.counts));
+  const noKey = await ai.evaluate(() => { HS.saveImageSettings('', '', ''); const r = HS.queueStart(); HS.saveImageSettings('openai', 'k', ''); return r; });
+  assert.equal(noKey, false);
+  await ai.evaluate(() => { HS.queueClearWaiting(); HS.Q.items = []; HS.queueClearDone(); });
+  IMG.status = {};
+});
+
+await test('Codex용: 고른 것만·다시 그릴 것만 주문서, 불러오면 전 그림은 후보로', async () => {
+  await ai.evaluate(() => HS.saveImageSettings('', '', ''));
+  await ai.click('#tabs button[data-tab=video]'); await ai.click('#tabs button[data-tab=shots]');
+  assert.equal(await ai.isDisabled('#batch-queue'), true, '키 없으면 대기열 단추는 꺼짐');
+  // 다시 그리기 → 다음 주문서에 넣기 (그림이 있는 샷이어야 다시 그리기 단추가 있음)
+  await ai.evaluate(() => { const c = document.createElement('canvas'); c.width = 64; c.height = 36; c.getContext('2d').fillRect(0, 0, 9, 9); HS.findShot('qaa1').sh.image = c.toDataURL('image/jpeg'); HS.changed('shots'); HS.renderShots(); });
+  const card = '#shots-board .shot[data-id="qaa1"]';
+  await ai.click(card + ' button[data-act=redo]');
+  await ai.fill(card + ' textarea[data-fb]', '강을 더 넓게');
+  await ai.click(card + ' button[data-act=redo-mark]');
+  await ai.waitForFunction(() => HS.findShot('qaa1').sh.redo === true);
+  assert.match(await ai.textContent('#redo-order'), /\(1\)/);
+  const redo = await download(ai, '#redo-order');
+  const r = await ai.evaluate(async b64 => { const z = await JSZip.loadAsync(b64, { base64: true }); return JSON.parse(await z.file('이미지 주문서/prompts.json').async('string')); }, redo.buf.toString('base64'));
+  assert.equal(r.count, 1);
+  assert.ok(r.images[0].file.endsWith('_qaa1.png') && r.images[0].prompt.includes('REVISED'), JSON.stringify(r.images[0]).slice(0, 200));
+  // 고른 것만
+  await ai.click('#sel-none');
+  await ai.check('#shots-board .shot[data-id="qbb2"] input[data-sel]');
+  await ai.check('#shots-board .shot[data-id="qcc3"] input[data-sel]');
+  const sel = await download(ai, '#batch-order');
+  const r2 = await ai.evaluate(async b64 => { const z = await JSZip.loadAsync(b64, { base64: true }); return JSON.parse(await z.file('이미지 주문서/prompts.json').async('string')).images.map(x => x.file.split('_')[1]); }, sel.buf.toString('base64'));
+  assert.deepEqual(r2, ['qbb2.png', 'qcc3.png']);
+  // 다시 그린 그림을 불러오면 다시 그릴 표시가 지워지고 전 그림은 후보로
+  const old = await ai.evaluate(() => HS.findShot('qaa1').sh.image);
+  const png = await ai.evaluate(() => { const c = document.createElement('canvas'); c.width = 64; c.height = 36; c.getContext('2d').fillRect(0, 0, 64, 36); return c.toDataURL('image/png').split(',')[1]; });
+  await ai.setInputFiles('#shots-import', { name: r.images[0].file, mimeType: 'image/png', buffer: Buffer.from(png, 'base64') });
+  await ai.waitForFunction(o => HS.findShot('qaa1').sh.image !== o, old);
+  const after = await ai.evaluate(o => { const sh = HS.findShot('qaa1').sh; return { redo: sh.redo, oldKept: (sh.candidates || []).includes(o) }; }, old);
+  assert.deepEqual(after, { redo: false, oldKept: true });
 });
 
 await test('그림·목소리가 든 프로젝트가 IndexedDB에 저장되어 다시 열어도 남는다', async () => {

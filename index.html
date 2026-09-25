@@ -94,6 +94,15 @@ table.places input{ width:100%; padding:4px 6px; }
 .shot input[type=text], .shot textarea{ width:100%; font-size:12px; padding:5px 7px; }
 .shot textarea{ min-height:70px; }
 .cast{ margin-top:6px; }
+.shot.sel{ outline:3px solid var(--accent); outline-offset:-1px; }
+.shot .top{ display:flex; align-items:center; gap:6px; }
+.cands{ display:flex; gap:4px; flex-wrap:wrap; }
+.cands img{ width:52px; height:30px; object-fit:cover; border-radius:4px; border:1px solid var(--line); cursor:pointer; opacity:.85; }
+.cands img:hover{ opacity:1; outline:2px solid var(--accent); }
+.redo-box{ border:1px dashed var(--accent); border-radius:6px; padding:6px; display:flex; flex-direction:column; gap:5px; }
+.qi{ display:flex; gap:8px; align-items:center; font-size:13px; padding:3px 6px; border-bottom:1px solid var(--line); }
+.qi .st{ width:92px; flex:none; white-space:nowrap; } .qi.fail .st{ color:#c0392b; } .qi.ok .st{ color:#3c8d5a; } .qi.run .st{ color:var(--accent); font-weight:700; }
+.qi .err{ color:#c0392b; font-size:12px; }
 .check{ border-left:4px solid var(--line); padding:6px 10px; margin:6px 0; background:var(--bg); border-radius:6px; font-size:14px; }
 .check.wrong{ border-color:#c0392b; } .check.unsupported{ border-color:#d68910; } .check.debated{ border-color:#7d6bb3; } .check.ok{ border-color:#3c8d5a; }
 .check q{ display:block; color:var(--muted); font-size:13px; margin-top:2px; }
@@ -110,6 +119,7 @@ table.places input{ width:100%; padding:4px 6px; }
   <h1>사관 스튜디오<small>역사 유튜브 제작 도구</small></h1>
   <select id="proj-select" aria-label="프로젝트 고르기" style="max-width:180px"></select>
   <input id="proj-title" type="text" placeholder="프로젝트 제목" aria-label="프로젝트 제목">
+  <button class="btn" id="queue-badge" hidden title="그림 대기열 — 누르면 🎨 이미지 탭으로" style="padding:4px 10px"></button>
   <button class="btn" id="btn-undo" title="AI가 덮어쓰기 전 상태로 되돌립니다" style="padding:4px 10px">↶ 되돌리기</button>
   <span id="ai-badge" class="pill">AI 꺼짐</span>
 </header>
@@ -234,6 +244,34 @@ table.places input{ width:100%; padding:4px 6px; }
         ChatGPT 앱이면 샷마다 "프롬프트 복사" → 그림 받기 → "파일 넣기"로 해도 됩니다.</p>
       <div class="row"><b id="shots-progress" class="small"></b></div>
       <span class="status" id="shots-status"></span>
+    </div>
+  </div>
+  <div class="card" id="batch-card">
+    <div class="row">
+      <b>여러 장 한꺼번에</b>
+      <button class="btn" id="sel-all">모두 고르기</button>
+      <button class="btn" id="sel-empty">그림 없는 것 고르기</button>
+      <button class="btn" id="sel-none">고르기 해제</button>
+      <span class="small" id="sel-count"></span>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <label class="inline">샷마다 후보 <select id="batch-variants"><option value="1">1장</option><option value="2">2장</option><option value="3">3장</option><option value="4">4장</option></select></label>
+      <button class="btn primary" id="batch-queue">고른 것 대기열에 넣고 만들기</button>
+      <button class="btn" id="batch-order">고른 것만 주문서</button>
+      <button class="btn" id="redo-order">다시 그릴 것 주문서</button>
+    </div>
+    <p class="small" id="batch-help"></p>
+    <div id="queue-panel" hidden>
+      <div class="row" style="margin-top:8px">
+        <b>그림 대기열</b>
+        <button class="btn" id="q-toggle">▶ 시작</button>
+        <label class="inline">동시에 <select id="q-conc"><option value="1">1장</option><option value="2">2장</option><option value="3">3장</option></select></label>
+        <button class="btn" id="q-retry">실패한 것 다시</button>
+        <button class="btn" id="q-clear">끝난 것 지우기</button>
+        <button class="btn" id="q-empty">기다리는 것 비우기</button>
+        <span class="small" id="q-summary"></span>
+      </div>
+      <div id="q-list"></div>
     </div>
   </div>
   <div id="shots-board"></div>
@@ -512,6 +550,7 @@ table.places input{ width:100%; padding:4px 6px; }
 <script src="assets/upload.js"></script>
 <script src="assets/lesson.js"></script>
 <script src="assets/package.js"></script>
+<script src="assets/queue.js"></script>
 <script src="assets/shots-ui.js"></script>
 <script src="assets/ui.js"></script>
 </body>
