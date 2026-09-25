@@ -102,7 +102,7 @@ export function createStudioServer({runner=generate,status=cliStatus,timeoutMs=1
       if(!/^\/(index\.html|(?:assets|content)\/[a-zA-Z0-9_./-]+)$/.test(name)||name.includes('..'))return send(404,{error:'파일이 없습니다.'});
       const file=path.join(root,name),real=await fs.realpath(file);
       if(!real.startsWith(root+path.sep))return send(404,{error:'파일이 없습니다.'});
-      const bytes=await fs.readFile(real);res.writeHead(200,{'Content-Type':name.endsWith('.html')?'text/html; charset=utf-8':name.endsWith('.js')?'text/javascript; charset=utf-8':'application/octet-stream','Cache-Control':'no-cache','X-Content-Type-Options':'nosniff'});res.end(bytes);
+      const bytes=await fs.readFile(real);res.writeHead(200,{'Content-Type':name.endsWith('.html')?'text/html; charset=utf-8':name.endsWith('.js')?'text/javascript; charset=utf-8':name.endsWith('.css')?'text/css; charset=utf-8':'application/octet-stream','Cache-Control':'no-cache','X-Content-Type-Options':'nosniff'});res.end(bytes);
     }catch{send(500,{error:'로컬 연결에 문제가 생겼습니다. 다시 시도해 주세요.'});}
   });
   server.on('close',()=>active?.cancel());return server;

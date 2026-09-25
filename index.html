@@ -120,6 +120,7 @@ table.places input{ width:100%; padding:4px 6px; }
 .material-group{margin:14px 0;padding:16px;border:1px solid var(--line);border-radius:10px}.material-group h4{margin:0}.material-group textarea{min-height:95px}.material-group .excerpt{white-space:pre-wrap;max-height:240px;overflow:auto;font-size:14px;padding:12px;background:var(--bg)}.material-group label{display:block}.material-group input[type=text]{width:100%}.material-confirm{padding-top:12px}.material-confirm b{flex:1}#material-script{min-height:240px;margin-bottom:12px}
 @media(max-width:620px){.material-outputs{grid-template-columns:1fr}.material-hero h2{font-size:25px}.material-group{padding:12px}}
 </style>
+<link rel="stylesheet" href="assets/studio.css">
 </head>
 <body>
 <header>
@@ -130,13 +131,15 @@ table.places input{ width:100%; padding:4px 6px; }
   <button class="btn" id="btn-undo" title="AI가 덮어쓰기 전 상태로 되돌립니다" style="padding:4px 10px">↶ 되돌리기</button>
   <span id="ai-badge" class="pill">AI 꺼짐</span>
 </header>
-<nav id="tabs">
-  <button data-tab="materials" class="on">✦ 자료 제작</button>
+<nav id="tabs" aria-label="스튜디오 도구">
+  <span class="nav-label">제작 워크스페이스</span>
+  <button data-tab="materials" class="on">자료 제작</button>
   <button data-tab="shots">삽화·이미지</button>
   <button data-tab="story">스토리 PPT</button>
   <button data-tab="map">지도 PNG</button>
   <button data-tab="board">판서 PPT</button>
   <button data-tab="script">대본 편집</button>
+  <span class="nav-label">보조 도구</span>
   <button data-tab="source">소스로 대본 쓰기</button>
   <button data-tab="chalk">손그림 → 판서</button>
   <button data-tab="video">영상 도구</button>
@@ -146,12 +149,12 @@ table.places input{ width:100%; padding:4px 6px; }
 </nav>
 <main>
 <section class="tab on" id="tab-materials">
-  <div class="material-hero"><span class="pill">대본 → 제작 목록 → 자료별 받기</span><h2>한 편의 대본을, 필요한 자료로.</h2>
-  <p class="lead">삽화·지도 PNG, 스토리 PPT, 판서 자료를 준비하세요. 그림은 Codex·ChatGPT 구독으로 만들고, 지도와 인용 화면·PPT는 여기서 만듭니다.</p></div>
+  <div class="material-hero"><div class="hero-copy"><span class="hero-eyebrow">HISTORY · CREATIVE STUDIO</span><h2>이야기가 시작되는 곳,<br>사관 스튜디오.</h2><p class="lead">한 편의 대본을 삽화와 지도, 스토리 PPT로.<br>수업과 영상에 필요한 자료를 한곳에서 준비하세요.</p></div><div class="hero-art" aria-hidden="true"><div class="hero-sheet"><i></i><i></i><i></i><i></i><i></i></div><div class="hero-picture"></div></div></div>
+  <ol class="workflow-path" aria-label="자료 제작 순서"><li id="workflow-input" aria-current="step"><b>01</b> 대본 입력</li><li id="workflow-review"><b>02</b> 목록 검토</li><li id="workflow-output"><b>03</b> 자료 제작</li></ol>
   <div class="card" id="material-input">
     <h3>1. 완성 대본 넣기</h3><p class="small">원고의 표현을 보존한 채 제작 구간을 나눕니다. 제목을 첫 줄에 넣어 주세요.</p>
     <textarea id="material-script" aria-label="완성 대본" placeholder="직접 쓴 설명 원고나 완성된 내레이션을 붙여 넣으세요."></textarea>
-    <div class="row"><button class="btn" id="material-sample">명량대첩 원고 예시</button><label class="btn">대본 파일 넣기<input id="material-file" type="file" accept=".txt,.md,text/plain" hidden></label><button class="btn primary" id="material-propose">제작 목록 제안받기</button></div>
+    <div class="row input-footer"><button class="btn" id="material-sample">명량대첩 원고 예시</button><label class="btn">대본 파일 넣기<input id="material-file" type="file" accept=".txt,.md,text/plain" hidden></label><button class="btn primary" id="material-propose">제작 목록 제안받기</button></div>
   </div>
   <div class="card" id="material-review" hidden>
     <h3>2. 만들 자료 검토하기</h3><p class="small" id="material-method"></p>

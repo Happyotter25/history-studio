@@ -8,6 +8,7 @@
     var m=state(),current=HS.materialCurrent(),ok=HS.materialApproved(),gs=m?m.groups.filter(function(g){return g.selected;}):[],pics=0;
     gs.forEach(function(g){if(g.kind==='illust')pics+=g.count;});
     $('material-summary').textContent=gs.length+'개 구간 · 삽화 '+pics+'장 · 지도 '+gs.filter(function(g){return g.kind==='map';}).length+'장 · 인용·비교 '+gs.filter(function(g){return g.kind==='source'||g.kind==='compare';}).length+'장';
+    ['input','review','output'].forEach(function(step){var el=$('workflow-'+step);if(step===(ok?'output':current?'review':'input'))el.setAttribute('aria-current','step');else el.removeAttribute('aria-current');});
     $('material-confirm').disabled=!current || !gs.length;
     $('material-output').hidden=!ok;
     if(ok){

@@ -58,7 +58,7 @@ the app chose by wrapping `HS.download`.
 ## Layout
 | Path | Role |
 |---|---|
-| `index.html` | Layout, all CSS, tab markup; script order matters (see bottom of file) |
+| `index.html` | Layout, base CSS, tab markup; script order matters (see bottom of file) |
 | `assets/app.js` | `window.HS` namespace: project state + multiple projects in IndexedDB (`hs` db, `kv` store: `projects` index, `current`, `project:<id>`, undo `history:<id>`; migrates the old single `project`/`history` keys; localStorage fallback), `HS.ready`, `HS.openProject/newProject/addProject/duplicateProject/deleteProject`, undo snapshots (`HS.snapshot`/`HS.restoreSnapshot`, last 10 per project), utils, `HS.callClaude` (SDK `maxRetries: 4`, `HS.cancelAI` aborts active streams, `HS.whyFail` maps status codes to Korean messages) |
 | `assets/scriptgen.js` | Source → script. `HS.generateAI` (schema `HS.SCRIPT_SCHEMA`), offline `HS.generateSimple`, `HS.rewriteScene`, `HS.factCheck`; `HS.userContent` puts attached PDFs/images first as document/image blocks with `cache_control` on the last one, then `<source>`, then reference videos (`<reference_video>` = facts, rewritten not copied; `<style_reference>` = structure/tone only); `HS.cleanTranscript` cleans pasted YouTube transcripts; `HS.YT_ID` |
 | `assets/board.js` | Board line syntax (`HS.parseBoardLine`), chalkboard background, `HS.drawBoardSlide` (with `progress` for the writing animation), `HS.boardChars` |
@@ -140,3 +140,7 @@ Drawing code sizes things by `Math.min(w, h) / 720` so the same code serves 16:9
 - `tools/studio-server.mjs`: same-origin token/Host checks, fixed CLI arguments (no shell), isolated temporary job directory, serial jobs, timeout/cancel, PNG validation and local `output/codex-images/` archive. Uses ChatGPT login and ignores user config/API-key environment variables; no paid API fallback. Native image-tool availability varies by CLI. CLI JSONL does not reliably expose native image calls, so PNG validation is not proof of image provenance.
 - `assets/codex-cli.js`: confirmed material plan only; one/all missing/redo images, progress, previews, auto-attach guarded by project object/shot ID/prompt/image/approval. Reload interrupts polling; archived images remain on disk.
 - Run `npm run test:cli` in addition to regular checks for bridge changes. Tests inject a fake generator; document actual CLI generation separately.
+
+## Studio UI
+- `assets/studio.css`: application-only theme, desktop sidebar, responsive navigation, focus states and dark mode; never change canvas/PPT output styling from this stylesheet.
+- Material workflow indicator in `assets/materials-ui.js` uses `aria-current=step` based on current plan/approval state. Existing element IDs remain the event/test contract.
