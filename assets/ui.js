@@ -116,7 +116,8 @@
         '<div class="meta"><label class="small">화면(삽화) 설명<textarea data-k="visual">' + HS.esc(s.visual) + '</textarea></label>' +
         '<label class="small">이미지 생성 프롬프트 <button class="btn" data-act="copyprompt" style="padding:0 8px">복사</button><textarea data-k="prompt">' + HS.esc(s.prompt) + '</textarea></label></div>' +
         '<div class="row small" style="margin-top:6px">분위기 <select data-k="mood">' + opts(MOODS, s.mood) + '</select> 카메라 <select data-k="motion">' + opts(MOTIONS, s.motion) + '</select> <span>약 ' + Math.round(HS.sceneDuration(s)) + '초</span>' +
-        '<span style="flex:1"></span>AI로 고치기 <select data-rw>' + opts(REWRITE_LABEL, 'short') + '</select><button class="btn" data-act="rewrite">고치기</button><span class="status" data-st></span></div></div>';
+        '<label class="inline" style="flex:1;min-width:180px">자막 강조 <input type="text" data-k="keywords" value="' + HS.esc((s.keywords || []).join(', ')) + '" placeholder="쉼표로 (예: 이순신, 1597년)" style="flex:1"></label>' +
+        'AI로 고치기 <select data-rw>' + opts(REWRITE_LABEL, 'short') + '</select><button class="btn" data-act="rewrite">고치기</button><span class="status" data-st></span></div></div>';
     }).join('');
   }
   function renderChecks(){
@@ -142,7 +143,8 @@
   });
   $('scene-list').addEventListener('input', function(e){
     var box = e.target.closest('.scene'), k = e.target.dataset.k; if(!box || !k) return;
-    P().scenes[+box.dataset.i][k] = e.target.value; HS.changed('scene');
+    P().scenes[+box.dataset.i][k] = k === 'keywords' ? e.target.value.split(/[,，]/).map(function(x){ return x.trim(); }).filter(Boolean) : e.target.value;
+    HS.changed('scene');
   });
   $('scene-list').addEventListener('change', function(e){ if(e.target.tagName === 'SELECT' && e.target.dataset.k) renderScript(); });
   $('scene-list').addEventListener('click', function(e){
@@ -211,12 +213,15 @@
         '<label class="inline"><input type="checkbox" data-act="usemap"' + (s.useMap ? ' checked' : '') + '> 지도 장면</label><span class="status" data-st></span></div>' +
         '<div class="row small" style="margin-top:6px">목소리 ' + voice + '</div>' +
         '<div class="row small" style="margin-top:6px">카메라 <select data-k="motion">' + opts(MOTIONS, s.motion) + '</select> 분위기 <select data-k="mood">' + opts(MOODS, s.mood) + '</select> ' +
+        '</div><div class="row small" style="margin-top:6px">캐릭터 <select data-act="char"><option value="">없음</option>' +
+          (p.characters || []).map(function(c){ return '<option value="' + c.id + '"' + (s.character && s.character.id === c.id ? ' selected' : '') + '>' + HS.esc(c.name) + '</option>'; }).join('') + '</select>' +
+          (s.character && s.character.id ? ' <select data-act="charside">' + opts({ left: '왼쪽', right: '오른쪽' }, s.character.side || 'left') + '</select>' : '') +
         '</div><div class="row small" style="margin-top:6px">이름표 <input type="text" data-k="caption" value="' + HS.esc(s.caption || '') + '" placeholder="예: 1592년 4월 · 부산" style="flex:1;min-width:120px">' +
         (i ? ' 전환 <select data-k="transition">' + opts(TRANS, s.transition || 'fade') + '</select> ' : ' ') +
         (s.audio ? '<span>목소리에 맞춰 약 ' + Math.round(HS.sceneDuration(s)) + '초</span>'
           : '<label class="inline">길이 <input type="number" data-k="dur" min="1.5" max="120" step="0.5" style="width:70px" value="' + (+s.dur > 0 ? s.dur : '') + '" placeholder="' + Math.round(HS.sceneDuration(Object.assign({}, s, { dur: 0 })) - 0.8) + '">초</label>') + '</div></div>';
     }).join('') : '<p class="small">대본이 없습니다.</p>';
-    renderBgm();
+    renderBgm(); renderChars();
     $('vid-seek').max = Math.max(0.1, HS.totalDuration()); $('vid-seek').value = playT;
     drawTimeline();
     status('vid-status', p.scenes.length ? '전체 약 ' + Math.round(HS.totalDuration()) + '초' : '');
@@ -233,6 +238,8 @@
     if(e.target.dataset.k === 'dur'){ var v = parseFloat(e.target.value); s.dur = v > 0 ? v : null; HS.changed('scene'); renderVideo(); return; }
     if(e.target.dataset.k){ s[e.target.dataset.k] = e.target.value; HS.changed('scene'); renderVideo(); return; }
     if(act === 'usemap'){ s.useMap = e.target.checked; HS.changed('scene'); renderVideo(); return; }
+    if(act === 'char'){ s.character = e.target.value ? { id: e.target.value, side: (s.character && s.character.side) || 'left' } : null; HS.changed('scene'); renderVideo(); return; }
+    if(act === 'charside'){ s.character.side = e.target.value; HS.changed('scene'); renderVideo(); return; }
     if(act === 'img' && e.target.files[0]){
       HS.readFile(e.target.files[0]).then(function(u){ return HS.shrinkImage(u, 1920); }).then(function(u){ s.image = u; s.svg = null; s.useMap = false; HS.changed('scene'); renderVideo(); });
     }
@@ -271,6 +278,65 @@
     }
     HS.changed('scene'); renderVideo();
   });
+  /* 프롬프터 연속 녹음: 한 장면씩 대본을 크게 보여 주며 녹음하고, "다음"이면 저장한 뒤 다음 장면을 곧바로 녹음합니다 */
+  var PR = { i: 0, mic: null, stop: null };
+  function prDraw(){
+    var sc = P().scenes, s = sc[PR.i];
+    $('pr-pos').textContent = (PR.i + 1) + ' / ' + sc.length;
+    $('pr-head').textContent = s.heading;
+    $('pr-text').textContent = s.narration || '(내레이션이 없습니다)';
+    $('pr-text').scrollTop = 0;
+    var st = $('pr-state');
+    st.textContent = PR.stop ? '● 녹음 중' : s.audio ? '녹음됨 ' + (s.audioDur || 0).toFixed(1) + '초' : '아직 녹음 안 함';
+    st.classList.toggle('rec', !!PR.stop);
+    $('pr-rec').textContent = PR.stop ? '■ 멈추고 저장' : s.audio ? '● 다시 녹음' : '● 녹음 시작';
+    $('pr-prev').disabled = PR.i === 0;
+    $('pr-next').textContent = PR.i === sc.length - 1 ? '저장하고 끝내기' : '저장하고 다음 ▶';
+  }
+  function prSave(){
+    if(!PR.stop) return Promise.resolve();
+    var stop = PR.stop, s = P().scenes[PR.i]; PR.stop = null;
+    return stop().then(function(u){ return HS.setSceneAudio(s, u); }).catch(function(e){ HS.toast(e.message); });
+  }
+  function prStart(){
+    return HS.recordVoice(PR.mic).then(function(stop){ PR.stop = stop; prDraw(); });
+  }
+  function prClose(){
+    prSave().then(function(){
+      if(PR.mic){ PR.mic.getTracks().forEach(function(t){ t.stop(); }); PR.mic = null; }
+      $('prompter').hidden = true; renderVideo();
+    });
+  }
+  $('vid-prompter').addEventListener('click', function(){
+    var sc = P().scenes; if(!sc.length) return;
+    stopPlay();
+    HS.openMic().then(function(mic){
+      PR.mic = mic;
+      var first = sc.map(function(s){ return !s.audio; }).indexOf(true);
+      PR.i = first < 0 ? 0 : first;
+      $('prompter').hidden = false; prDraw();
+    }).catch(function(e){ HS.toast((e && e.message) || '마이크를 쓸 수 없습니다. 음성 파일을 넣는 방법을 쓰세요'); });
+  });
+  $('pr-rec').addEventListener('click', function(){
+    if(PR.stop) prSave().then(prDraw); else prStart();
+  });
+  $('pr-next').addEventListener('click', function(){
+    var last = PR.i === P().scenes.length - 1, wasRec = !!PR.stop;
+    prSave().then(function(){
+      if(last){ prClose(); return; }
+      PR.i++; prDraw();
+      if(wasRec) prStart(); // 녹음하던 흐름이면 다음 장면도 곧바로
+    });
+  });
+  $('pr-prev').addEventListener('click', function(){ prSave().then(function(){ PR.i = Math.max(0, PR.i - 1); prDraw(); }); });
+  $('pr-close').addEventListener('click', prClose);
+  $('pr-size').addEventListener('input', function(){ $('pr-text').style.fontSize = this.value + 'px'; });
+  document.addEventListener('keydown', function(e){
+    if($('prompter').hidden) return;
+    if(e.key === ' ' || e.key === 'ArrowRight'){ e.preventDefault(); $('pr-next').click(); }
+    else if(e.key === 'Escape') prClose();
+  });
+  HS.prompter = PR;
   $('vid-draw-all').addEventListener('click', function(){
     var btn = this;
     if(!needAI('vid-status')) return;
@@ -299,6 +365,42 @@
     stopPlay(); playT = +this.value;
     drawVideoAt(playT); drawTimeline();
     status('vid-status', Math.floor(playT) + ' / ' + Math.round(HS.totalDuration()) + '초');
+  });
+  function renderChars(){
+    var cs2 = P().characters || [];
+    $('char-list').innerHTML = cs2.length ? cs2.map(function(c){
+      return '<div class="char" data-id="' + c.id + '"><img src="' + c.image + '" alt=""><input type="text" value="' + HS.esc(c.name) + '" aria-label="캐릭터 이름"><button class="btn" data-act="delchar" style="padding:1px 8px">지우기</button></div>';
+    }).join('') : '<span class="small">아직 없습니다.</span>';
+    $('char-all').disabled = !cs2.length;
+  }
+  $('char-list').addEventListener('change', function(e){
+    var box = e.target.closest('.char'); if(!box || e.target.tagName !== 'INPUT') return;
+    HS.characterById(box.dataset.id).name = e.target.value.trim() || '캐릭터'; HS.changed('characters'); renderVideo();
+  });
+  $('char-list').addEventListener('click', function(e){
+    var b = e.target.closest('button[data-act=delchar]'); if(!b) return;
+    var id = b.closest('.char').dataset.id;
+    if(!confirm('이 캐릭터를 지울까요? 장면에서도 빠집니다.')) return;
+    P().characters = P().characters.filter(function(c){ return c.id !== id; });
+    P().scenes.forEach(function(sc){ if(sc.character && sc.character.id === id) sc.character = null; });
+    if(P().thumb && P().thumb.character === id) P().thumb.character = '';
+    HS.changed('characters'); renderVideo();
+  });
+  $('char-file').addEventListener('change', function(){
+    var f = this.files[0], input = this; if(!f) return;
+    HS.readFile(f).then(HS.loadImage).then(function(img){
+      var k = Math.min(1, 1000 / Math.max(img.width, img.height)), c = document.createElement('canvas');
+      c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      var st = HS.makeSticker(c, { outline: false });
+      if(!st) throw new Error('그림을 찾지 못했습니다');
+      HS.addCharacter(f.name.replace(/\.[^.]+$/, ''), st); renderVideo();
+    }).catch(function(e){ HS.toast(e.message); }).then(function(){ input.value = ''; });
+  });
+  $('char-all').addEventListener('click', function(){
+    var c = (P().characters || [])[0]; if(!c) return;
+    P().scenes.forEach(function(sc, i){ if(i > 0 && !sc.useMap) sc.character = { id: c.id, side: 'left' }; });
+    HS.changed('scenes'); renderVideo(); HS.toast('"' + c.name + '"을(를) 지도 장면을 뺀 모든 장면에 넣었습니다');
   });
   function renderBgm(){
     var b = P().bgm;
@@ -555,6 +657,13 @@
       .then(function(b){ HS.download(HS.fileName(' 그리는영상' + HS.videoExt(b)), b); status('chalk-status', '녹화를 마쳤습니다'); convert(); })
       .catch(function(e){ status('chalk-status', e.message, true); })
       .then(function(){ btn.disabled = false; });
+  });
+  $('chalk-to-char').addEventListener('click', function(){
+    var st = HS.makeSticker(cs, { sens: +$('chalk-th').value, chalk: $('char-chalk').checked, color: $('chalk-color').value, outline: $('char-outline').checked });
+    if(!st){ status('chalk-status', '캐릭터로 쓸 그림이 없습니다', true); return; }
+    var name = prompt('캐릭터 이름', '진행자'); if(name === null) return;
+    var ch = HS.addCharacter(name, st);
+    status('chalk-status', '"' + ch.name + '"을(를) 캐릭터로 저장했습니다. ③ 삽화 영상 탭에서 장면에 넣으세요.');
   });
   $('chalk-png').addEventListener('click', function(){ co.toBlob(function(b){ HS.download(HS.fileName(' 판서그림.png'), b); }); });
   $('chalk-to-board').addEventListener('click', function(){

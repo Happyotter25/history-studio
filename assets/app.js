@@ -29,7 +29,8 @@
       thumb: null,  // {scene, main, sub, color, layout}
       bgm: null,    // 배경음악 {name, data(dataURL), dur, volume, duck}
       lesson: null, // 수업 자료 {goals, quiz, summary, activity, discussion}
-      aspect: '16:9' // 영상 화면 비율 ('16:9' | '9:16' 쇼츠)
+      aspect: '16:9', // 영상 화면 비율 ('16:9' | '9:16' 쇼츠)
+      characters: [] // 내 캐릭터 {id, name, image(PNG dataURL), w, h}
     };
   };
   HS.project = HS.blankProject();
@@ -293,10 +294,15 @@
     save('hs.cost', JSON.stringify(HS.cost));
   }
 
-  // 흘려 받으며(onText) 구조화된 JSON 으로 답을 받습니다
+  // 흘려 받으며(onText) 구조화된 JSON 으로 답을 받습니다.
+  // 붐빔(429·529)·연결 끊김은 SDK 가 알아서 몇 번 다시 시도하고, HS.cancelAI() 로 진행 중인 요청을 멈출 수 있습니다.
+  var active = [];
+  HS.cancelAI = function(){ active.slice().forEach(function(st){ try{ st.abort(); }catch(e){} }); active = []; };
+  HS.aiBusy = function(){ return active.length > 0; };
   HS.callClaude = function(system, messages, schema, onText, effort){
+    var st = null;
     return loadSDK().then(function(Anthropic){
-      var client = new Anthropic({ apiKey: HS.CFG.key, dangerouslyAllowBrowser: true });
+      var client = new Anthropic({ apiKey: HS.CFG.key, dangerouslyAllowBrowser: true, maxRetries: 4, timeout: 15 * 60 * 1000 });
       var req = {
         model: HS.CFG.model,
         max_tokens: 32000,
@@ -308,25 +314,38 @@
       else delete req.output_config.effort; // Haiku 4.5 는 effort 를 받지 않습니다
       if(schema) req.output_config.format = { type: 'json_schema', schema: schema };
       if(!Object.keys(req.output_config).length) delete req.output_config;
-      var st;
       if(HS.CFG.model === 'claude-opus-5'){ // 거절되면 서버가 알맞은 모델로 다시 돌립니다
         req.betas = ['server-side-fallback-2026-07-01'];
         req.fallbacks = 'default';
         st = client.beta.messages.stream(req);
       } else st = client.messages.stream(req);
+      active.push(st);
       if(onText) st.on('text', function(delta, snapshot){ try{ onText(snapshot); }catch(e){} });
       return st.finalMessage();
     }).then(function(res){
+      active = active.filter(function(x){ return x !== st; });
       addCost(res);
       if(res.stop_reason === 'refusal') throw new Error('Claude가 이 요청을 처리하지 않았습니다');
       if(res.stop_reason === 'max_tokens') throw new Error('답이 너무 길어 끊겼습니다. 소스를 나눠 넣어 보세요');
       var txt = res.content.filter(function(b){ return b.type === 'text'; }).map(function(b){ return b.text; }).join('');
-      return { data: schema ? JSON.parse(txt) : null, text: txt };
+      var data = null;
+      if(schema){ try{ data = JSON.parse(txt); }catch(e){ throw new Error('답을 읽지 못했습니다. 다시 해 보세요'); } }
+      return { data: data, text: txt };
+    }, function(err){
+      active = active.filter(function(x){ return x !== st; });
+      throw err;
     });
   };
   HS.whyFail = function(err){
-    return (err && err.status === 401) ? 'API 키가 맞지 않습니다'
-      : (err && err.status === 429) ? '요청이 너무 잦습니다. 잠시 뒤 다시 해 보세요'
-      : (err && err.message) ? String(err.message).slice(0, 120) : '연결되지 않았습니다';
+    var st = err && err.status, msg = String((err && err.message) || '');
+    if(err && (err.name === 'APIUserAbortError' || /abort/i.test(msg))) return '멈췄습니다';
+    return st === 401 ? 'API 키가 맞지 않습니다. 설정에서 키를 확인하세요'
+      : st === 403 ? '이 키로는 쓸 수 없는 기능이나 모델입니다'
+      : st === 413 ? '보낸 자료가 너무 큽니다. PDF를 나눠 넣거나 사진을 줄여 보세요'
+      : st === 429 ? '요청이 너무 잦습니다. 1분쯤 뒤에 다시 해 보세요'
+      : (st === 529 || /overloaded/i.test(msg)) ? 'Claude가 지금 붐빕니다. 잠시 뒤 다시 해 보세요'
+      : st >= 500 ? 'Anthropic 서버에 문제가 있습니다. 잠시 뒤 다시 해 보세요'
+      : st === 400 ? '요청이 올바르지 않습니다: ' + msg.slice(0, 100)
+      : msg ? msg.slice(0, 120) : '인터넷 연결을 확인하세요';
   };
 })();

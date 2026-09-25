@@ -39,7 +39,8 @@ const AI_ANSWER = {
   map: { title: '명량 해전', places: [{ name: '명량', lon: 126.31, lat: 34.57, kind: 'battle' }, { name: '한양', lon: 126.98, lat: 37.57, kind: 'capital' }], routes: [{ from: '명량', to: '한양', label: '서해 진출 저지' }],
     regions: [{ name: '조선(대략)', color: '#2f6db3', points: [[124.5, 40], [129.5, 42.5], [129.5, 35], [126.5, 34.3], [126.2, 37.5]] }] }
 };
-AI_ANSWER.scenes.forEach((x, i) => { x.use_map = i === 1; x.caption = ['', '1597년 · 명량', ''][i]; x.transition = ['fade', 'ink', 'wipe'][i]; });
+AI_ANSWER.scenes.forEach((x, i) => { x.use_map = i === 1; x.caption = ['', '1597년 · 명량', ''][i]; x.transition = ['fade', 'ink', 'wipe'][i];
+  x.keywords = [['13척', '없는말'], ['울돌목'], ['명량 해전']][i]; });
 // 삽화가 답: 위험한 것(스크립트, 바깥 그림, onload)을 섞어 걸러지는지 봅니다
 const SVG_ANSWER = '그림입니다.\n<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" onload="alert(1)">' +
   '<defs><linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#335"/><stop offset="1" stop-color="#e96"/></linearGradient></defs>' +
@@ -74,7 +75,8 @@ async function test(name, fn) {
   catch (e) { results.push([false, name]); console.log('  ✗', name, '\n    ', e.message.split('\n').slice(0, 4).join('\n     ')); }
 }
 
-const browser = await chromium.launch({ executablePath });
+// 가짜 마이크: 프롬프터 녹음을 시험합니다
+const browser = await chromium.launch({ executablePath, args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream'] });
 async function open(viewport = { width: 1300, height: 900 }) {
   const ctx = await browser.newContext({ viewport, acceptDownloads: true });
   await ctx.route(/fonts\.(googleapis|gstatic)\.com/, r => r.abort());
@@ -254,7 +256,8 @@ await ai.context().route('https://api.anthropic.com/**', async route => {
   aiBodies.push(body);
   await route.fulfill({ status: 200, headers: { 'content-type': 'text/event-stream', 'access-control-allow-origin': '*' }, body: sse(answerFor(body)) });
 });
-ai.on('dialog', d => d.accept(d.type() === 'prompt' ? '조선 영역' : undefined));
+let promptAnswer = '조선 영역'; // prompt 창에 넣을 답 (시험마다 바꿈)
+ai.on('dialog', d => d.accept(d.type() === 'prompt' ? promptAnswer : undefined));
 await ai.evaluate(() => localStorage.setItem('hs.key', 'sk-ant-test'));
 await ai.reload(); await ai.waitForSelector('body[data-ready]');
 await ai.fill('#src-text', '1597년 조선 수군에게 남은 배는 13척이었다. 이순신은 명량에서 싸웠다.');
@@ -661,8 +664,144 @@ await test('예전 저장 방식(프로젝트 하나)에서 자동으로 옮겨 
   await pg.context().close();
 });
 
+await test('자막 핵심어: 대본에 있는 말만 남기고 노랗게 칠한다', async () => {
+  const r = await ai.evaluate(() => {
+    const kw = HS.project.scenes.map(s => s.keywords);
+    const segs = HS.markKeywords('1597년 13척의 배와 13척', ['13척', '1597년']);
+    const c = document.createElement('canvas'); c.width = 1280; c.height = 720; const x = c.getContext('2d');
+    const s = HS.project.scenes[0], seg = HS.timeline()[0];
+    HS.project.scenes.length = HS.project.scenes.length; // 그대로
+    HS.drawVideoFrame(x, 1280, 720, 0.1, {});
+    // 첫 장면은 제목 화면이라 자막이 없으니 둘째 장면으로 봅니다 (지도 장면이라 배경이 옅음)
+    const t = HS.timeline()[2].start + 2; HS.drawVideoFrame(x, 1280, 720, t, {});
+    const d = x.getImageData(0, 560, 1280, 160).data; let yellow = 0;
+    for (let i = 0; i < d.length; i += 4) if (d[i] > 230 && d[i + 1] > 190 && d[i + 2] < 120) yellow++;
+    return { kw, segs, yellow };
+  });
+  assert.deepEqual(r.kw[0], ['13척'], '대본에 없는 말이 걸러지지 않음');
+  assert.deepEqual(r.segs.map(x => [x.t, x.key]), [['1597년', true], [' ', false], ['13척', true], ['의 배와 ', false], ['13척', true]]);
+  assert.ok(r.yellow > 100, '노란 핵심어가 안 보임 ' + r.yellow);
+});
+
+await test('내 캐릭터: 종이 바탕만 지우고 안쪽은 남긴 스티커를 영상·썸네일에 쓴다', async () => {
+  await ai.click('#tabs button[data-tab=chalk]');
+  await ai.click('#chalk-clear');
+  const st = await ai.evaluate(() => {
+    const c = document.getElementById('chalk-src'), x = c.getContext('2d');
+    x.fillStyle = '#f2efe6'; x.fillRect(0, 0, c.width, c.height);          // 누런 종이
+    x.fillStyle = '#ffffff'; x.strokeStyle = '#222'; x.lineWidth = 6;
+    x.beginPath(); x.arc(400, 300, 120, 0, 7); x.fill(); x.stroke();          // 흰 얼굴 (안쪽은 흰색)
+    x.fillStyle = '#d33'; x.fillRect(370, 330, 60, 20);                        // 빨간 입
+    const s = HS.makeSticker(c, { sens: 14 });
+    return s;
+  });
+  assert.ok(st && st.w > 230 && st.w < 280, JSON.stringify(st && [st.w, st.h]));
+  promptAnswer = '선생님';
+  await ai.uncheck('#char-outline');
+  await ai.click('#chalk-to-char');
+  await ai.waitForFunction(() => (HS.project.characters || []).length === 1);
+  const px = await ai.evaluate(async () => {
+    const ch = HS.project.characters[0], im = await HS.loadImage(ch.image), c = document.createElement('canvas');
+    c.width = im.width; c.height = im.height; const x = c.getContext('2d'); x.drawImage(im, 0, 0);
+    const at = (a, b) => Array.from(x.getImageData(a, b, 1, 1).data);
+    return { corner: at(2, 2), center: at(Math.round(im.width / 2), Math.round(im.height / 2) - 60), name: ch.name };
+  });
+  assert.equal(px.name, '선생님');
+  assert.equal(px.corner[3], 0, '바깥 종이가 남음');
+  assert.ok(px.center[3] === 255 && px.center[0] > 240, '얼굴 안쪽이 지워짐 ' + px.center);
+  // 영상: 캐릭터를 넣으면 그 자리가 달라집니다
+  await ai.click('#tabs button[data-tab=video]');
+  await ai.click('#char-all');
+  const diff = await ai.evaluate(async () => {
+    await HS.preloadImages();
+    const s = HS.project.scenes[2], t = HS.timeline()[2].start + 2, c = document.createElement('canvas'); c.width = 640; c.height = 360;
+    const x = c.getContext('2d'); HS.drawVideoFrame(x, 640, 360, t, { subs: false }); const a = x.getImageData(20, 150, 150, 150).data.join();
+    const keep = s.character; s.character = null; HS.drawVideoFrame(x, 640, 360, t, { subs: false }); const b = x.getImageData(20, 150, 150, 150).data.join();
+    s.character = keep;
+    return { changed: a !== b, onMap: !!HS.project.scenes[1].character };
+  });
+  assert.ok(diff.changed, '캐릭터가 안 그려짐');
+  assert.equal(diff.onMap, false, '지도 장면에도 들어감');
+  await ai.click('#tabs button[data-tab=upload]');
+  const opts = await ai.locator('#thumb-character option').allTextContents();
+  assert.deepEqual(opts, ['없음', '선생님']);
+});
+
+await test('프롬프터: 대본을 띄워 놓고 장면을 차례로 녹음한다', async () => {
+  await ai.click('#tabs button[data-tab=video]');
+  await ai.evaluate(() => { HS.project.scenes.forEach(s => { s.audio = null; s.audioDur = 0; }); HS.changed('scenes'); });
+  await ai.click('#vid-prompter');
+  await ai.waitForSelector('#prompter:not([hidden])');
+  assert.equal(await ai.textContent('#pr-pos'), '1 / 3');
+  assert.equal(await ai.textContent('#pr-text'), await ai.evaluate(() => HS.project.scenes[0].narration));
+  await ai.click('#pr-rec');
+  await ai.waitForSelector('#pr-state.rec');
+  await ai.waitForTimeout(900);
+  await ai.keyboard.press('Space');                    // 저장하고 다음 → 곧바로 녹음
+  await ai.waitForFunction(() => HS.project.scenes[0].audioDur > 0.4);
+  await ai.waitForSelector('#pr-state.rec');
+  assert.equal(await ai.textContent('#pr-pos'), '2 / 3');
+  await ai.waitForTimeout(700);
+  await ai.click('#pr-close');
+  await ai.waitForSelector('#prompter[hidden]', { state: 'attached' });
+  const r = await ai.evaluate(() => HS.project.scenes.map(s => +(s.audioDur || 0).toFixed(1)));
+  assert.ok(r[0] > 0.4 && r[1] > 0.3 && r[2] === 0, JSON.stringify(r));
+});
+
+await test('모두 받기: ZIP 하나에 대본·자막·PPT·학습지·썸네일·지도·장면 그림·캐릭터', async () => {
+  await ai.click('#tabs button[data-tab=upload]');
+  const { name, buf } = await download(ai, '#up-zip');
+  assert.match(name, /전체\.zip$/);
+  assert.equal(buf.slice(0, 2).toString(), 'PK');
+  const names = await ai.evaluate(async b64 => {
+    const z = await JSZip.loadAsync(b64, { base64: true }); return Object.keys(z.files);
+  }, buf.toString('base64'));
+  for (const f of ['대본.txt', '자막.srt', '챕터.txt', '업로드 정보.txt', '스토리.pptx', '판서.pptx', '퀴즈.pptx', '학습지(학생용).html', '학습지(교사용).html', '썸네일.png', '지도.png', '프로젝트 백업.json', '캐릭터/선생님.png', '장면 그림/01 '])
+    assert.ok(names.some(n => n.includes(f)), f + ' 없음\n' + names.join('\n'));
+});
+
+await test('Claude가 붐빌 때(529) 알아서 다시 시도하고, 오류는 알기 쉽게 알린다', async () => {
+  let calls = 0;
+  await ai.context().unroute('https://api.anthropic.com/**');
+  await ai.context().route('https://api.anthropic.com/**', async route => {
+    calls++;
+    if (calls === 1) return route.fulfill({ status: 529, headers: { 'content-type': 'application/json', 'access-control-allow-origin': '*', 'retry-after': '0' }, body: JSON.stringify({ type: 'error', error: { type: 'overloaded_error', message: 'Overloaded' } }) });
+    const body = JSON.parse(route.request().postData());
+    await route.fulfill({ status: 200, headers: { 'content-type': 'text/event-stream', 'access-control-allow-origin': '*' }, body: sse(answerFor(body)) });
+  });
+  await ai.evaluate(() => HS.generateUploadAI());
+  assert.equal(calls, 2);
+  const msgs = await ai.evaluate(() => [{ status: 529 }, { status: 401 }, { status: 413 }, { name: 'APIUserAbortError', message: 'Request was aborted.' }, {}].map(HS.whyFail));
+  assert.ok(msgs[0].includes('붐빕니다') && msgs[1].includes('키') && msgs[2].includes('너무 큽니다') && msgs[3] === '멈췄습니다' && msgs[4].includes('인터넷'), msgs.join(' | '));
+});
+
+await test('한 번에 만들기: 대본부터 수업 자료까지 차례로 만든다 (AI)', async () => {
+  await ai.click('#tabs button[data-tab=source]');
+  await ai.click('#pipe-open');
+  for (const id of ['art', 'check', 'upload', 'lesson']) assert.ok(await ai.isChecked('#pipe-' + id));
+  assert.match(await ai.textContent('#pipe-cost'), /예상 비용 약 [\d,]+원/);
+  await ai.uncheck('#pipe-art');
+  await ai.click('#pipe-run');
+  await ai.waitForSelector('#pipe-zip:not([hidden])', { timeout: 20000 });
+  const log = await ai.textContent('#pipe-log');
+  for (const w of ['대본·판서·지도 완료', '사실 확인 완료', '제목·설명·태그 완료', '수업 자료 완료', '다 만들었습니다']) assert.ok(log.includes(w), w + ' 없음: ' + log);
+  assert.ok(!log.includes('AI 그림'));
+  const p = await ai.evaluate(() => ({ checks: !!HS.project.checks, upload: !!HS.project.upload, lesson: !!HS.project.lesson, scenes: HS.project.scenes.length }));
+  assert.deepEqual(p, { checks: true, upload: true, lesson: true, scenes: 3 });
+});
+
 await test('그림·목소리가 든 프로젝트가 IndexedDB에 저장되어 다시 열어도 남는다', async () => {
-  await ai.evaluate(() => HS.persist());
+  // 이 시험 안에서 그림과 목소리를 넣습니다 (앞 시험들이 대본을 새로 만들었을 수 있음)
+  await ai.evaluate(async () => {
+    const rate = 8000, n = 4000, buf = new ArrayBuffer(44 + n * 2), v = new DataView(buf);
+    const w = (o, str) => { for (let i = 0; i < str.length; i++) v.setUint8(o + i, str.charCodeAt(i)); };
+    w(0, 'RIFF'); v.setUint32(4, 36 + n * 2, true); w(8, 'WAVE'); w(12, 'fmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+    v.setUint32(24, rate, true); v.setUint32(28, rate * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true); w(36, 'data'); v.setUint32(40, n * 2, true);
+    let bin = ''; new Uint8Array(buf).forEach(b => bin += String.fromCharCode(b));
+    await HS.setSceneAudio(HS.project.scenes[2], 'data:audio/wav;base64,' + btoa(bin));
+    HS.project.scenes[0].svg = HS.cleanSvg('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900"><rect width="1600" height="900" fill="#345"/></svg>');
+    await HS.persist();
+  });
   await ai.reload(); await ai.waitForSelector('body[data-ready]');
   const r = await ai.evaluate(() => ({ svg: !!HS.project.scenes[0].svg, audio: !!HS.project.scenes[2].audio, ls: localStorage.getItem('hs.project') }));
   assert.ok(r.svg && r.audio);
@@ -682,6 +821,22 @@ await test('키 없이도 연도·지명 빈칸 퀴즈를 만든다', async () =
   }
   assert.ok(new Set(L.quiz.map(q => q.choices.indexOf(q.answer))).size > 1, '정답 자리가 늘 같음');
   assert.ok(L.summary.includes('[['));
+  await pg.context().close();
+});
+
+await test('한 번에 만들기: 키 없이도 대본·업로드 정보·수업 자료를 만들고 ZIP으로 받는다', async () => {
+  const pg = await open();
+  await pg.click('#src-sample');
+  await pg.click('#pipe-open');
+  assert.ok(await pg.isDisabled('#pipe-art') && await pg.isDisabled('#pipe-check'));
+  assert.match(await pg.textContent('#pipe-cost'), /무료/);
+  await pg.click('#pipe-run');
+  await pg.waitForSelector('#pipe-zip:not([hidden])');
+  assert.ok(!(await pg.isVisible('#pipe-stop')), '멈추기 단추가 남아 있음');
+  const p = await pg.evaluate(() => ({ upload: !!HS.project.upload, lesson: !!HS.project.lesson, n: HS.project.scenes.length }));
+  assert.ok(p.upload && p.lesson && p.n > 3, JSON.stringify(p));
+  const [d] = await Promise.all([pg.waitForEvent('download'), pg.click('#pipe-zip')]);
+  assert.ok(fs.statSync(await d.path()).size > 50000);
   await pg.context().close();
 });
 

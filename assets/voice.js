@@ -94,10 +94,15 @@
   };
 
   // 마이크 녹음 — start() 하면 stop 함수를 돌려주고, stop() 은 dataURL 을 돌려줍니다
-  HS.recordVoice = function(){
+  // 마이크 열기 (연속 녹음에서는 한 번 열어 여러 장면에 씁니다)
+  HS.openMic = function(){
     if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || !window.MediaRecorder)
       return Promise.reject(new Error('이 브라우저에서는 녹음할 수 없습니다'));
-    return navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } }).then(function(stream){
+    return navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+  };
+  // stream 을 주면 그 마이크로 녹음하고 끝나도 닫지 않습니다
+  HS.recordVoice = function(given){
+    return (given ? Promise.resolve(given) : HS.openMic()).then(function(stream){
       var type = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : '';
       var rec = new MediaRecorder(stream, type ? { mimeType: type } : undefined), chunks = [];
       rec.ondataavailable = function(e){ if(e.data.size) chunks.push(e.data); };
@@ -105,7 +110,7 @@
       return function stop(){
         return new Promise(function(ok){
           rec.onstop = function(){
-            stream.getTracks().forEach(function(t){ t.stop(); });
+            if(!given) stream.getTracks().forEach(function(t){ t.stop(); });
             var blob = new Blob(chunks, { type: rec.mimeType || 'audio/webm' }), r = new FileReader();
             r.onload = function(){ ok(r.result); };
             r.readAsDataURL(blob);

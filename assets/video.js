@@ -17,13 +17,13 @@
     return c.ok ? c.img : null;
   };
   HS.preloadImages = function(){
-    return Promise.all(HS.project.scenes.map(function(s){
+    return Promise.all([HS.preloadCharacters ? HS.preloadCharacters() : null].concat(HS.project.scenes.map(function(s){
       if(s.svg) return HS.sceneLayersReady(s);
       if(!s.image) return null;
       HS.sceneImage(s);
       var c = imgCache[s.image];
       return c.ok ? null : new Promise(function(ok){ c.img.addEventListener('load', ok); c.img.addEventListener('error', ok); });
-    }));
+    })));
   };
 
   // 목소리가 있으면 목소리 길이에, 없으면 글자 수에 맞춥니다
@@ -101,6 +101,18 @@
       return { start: st, end: i === chunks.length - 1 ? end : Math.min(end, seg.start + lead + acc / total * span), lines: c };
     });
   }
+  // 글을 핵심어 조각과 나머지 조각으로 나눕니다 [{t, key}]
+  HS.markKeywords = function(text, keys){
+    var out = [], i = 0, plain = '';
+    while(i < text.length){
+      var hit = null;
+      for(var k = 0; k < keys.length; k++) if(keys[k] && text.substr(i, keys[k].length) === keys[k]){ hit = keys[k]; break; }
+      if(hit){ if(plain){ out.push({ t: plain, key: false }); plain = ''; } out.push({ t: hit, key: true }); i += hit.length; }
+      else { plain += text[i]; i++; }
+    }
+    if(plain) out.push({ t: plain, key: false });
+    return out;
+  };
   HS.subtitleCues = function(){
     var scenes = HS.project.scenes, out = [];
     HS.timeline().forEach(function(seg){ out = out.concat(sceneCues(scenes[seg.i], seg)); });
@@ -115,10 +127,16 @@
     var bottom = w < h ? h * 0.74 : h - 60 * u; // 쇼츠는 아래쪽을 앱 단추가 가리므로 조금 위로
     var y0 = bottom - lh * (cur.lines.length - 1);
     subFont(ctx, w, h);
+    var keys = (s.keywords || []).filter(Boolean).sort(function(a, b){ return b.length - a.length; });
     cur.lines.forEach(function(line, i){
       var tw = ctx.measureText(line).width, x = (w - tw) / 2, y = y0 + i * lh;
       ctx.fillStyle = 'rgba(0,0,0,.55)'; ctx.fillRect(x - 14 * u, y - size, tw + 28 * u, size * 1.3);
-      ctx.fillStyle = '#fff'; ctx.fillText(line, x, y);
+      // 핵심어는 노랗게
+      HS.markKeywords(line, keys).forEach(function(seg){
+        ctx.fillStyle = seg.key ? '#ffd84d' : '#fff';
+        ctx.fillText(seg.t, x, y);
+        x += ctx.measureText(seg.t).width;
+      });
     });
   }
 
@@ -204,6 +222,9 @@
         ctx.drawImage(layerCanvas, 0, 0);
       }
       if(prog >= 1 || seg.i === 0){
+        // 내 캐릭터: 전환이 끝난 뒤 올라오고, 말하는 동안 통통 튑니다
+        var lead = s.audio ? HS.VOICE_LEAD : FADE * 0.5, talkEnd = s.audio && s.audioDur ? lead + s.audioDur : seg.dur - FADE;
+        HS.drawSceneCharacter(ctx, w, h, s, local - (seg.i ? FADE : 0), seg.dur - (seg.i ? FADE : 0), local > lead && local < talkEnd && !!(s.narration || s.audio));
         if(seg.i === 0 && scenes.length > 1) titleCard(ctx, w, h, scenes[0], local);
         else caption(ctx, w, h, s.caption, local, seg.dur);
         if(opts.subs !== false && !(seg.i === 0 && scenes.length > 1)) subtitle(ctx, w, h, s, seg, t);

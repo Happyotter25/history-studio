@@ -110,7 +110,8 @@
       '</body></html>';
   };
   /* ── 퀴즈 PPT: 문제 → 정답 ───────────────────────────── */
-  HS.exportQuizPptx = function(){
+  HS.exportQuizPptx = function(opt){
+    opt = opt || {};
     var p = P(), L = p.lesson;
     if(!L || !L.quiz.length) return Promise.reject(new Error('퀴즈가 없습니다'));
     var pptx = new window.PptxGenJS(), W = 13.333, sans = 'Noto Sans KR';
@@ -137,7 +138,7 @@
         }
       });
     });
-    return pptx.write({ outputType: 'blob' }).then(function(blob){ HS.download(HS.fileName(' 퀴즈.pptx'), blob); return blob; });
+    return pptx.write({ outputType: 'blob' }).then(function(blob){ if(!opt.noDownload) HS.download(HS.fileName(' 퀴즈.pptx'), blob); return blob; });
   };
 
   /* ── 화면 ──────────────────────────────────────────── */

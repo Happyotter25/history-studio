@@ -20,7 +20,7 @@ This repo was started from the same author's 어전회의 (eojeon) project and f
 ## Test (run before every commit)
 ```
 npm install
-npm test          # node tests/e2e.mjs — 37 Playwright tests, Claude API is mocked (SSE, routed by system prompt)
+npm test          # node tests/e2e.mjs — 44 Playwright tests (Chromium runs with a fake microphone), Claude API is mocked (SSE, routed by system prompt)
 ```
 `CHROMIUM_PATH=/path/to/chromium npm test` uses a specific browser.
 Headless Chromium renames non-ASCII download names to `download`; tests read the name
@@ -30,7 +30,7 @@ the app chose by wrapping `HS.download`.
 | Path | Role |
 |---|---|
 | `index.html` | Layout, all CSS, tab markup; script order matters (see bottom of file) |
-| `assets/app.js` | `window.HS` namespace: project state + multiple projects in IndexedDB (`hs` db, `kv` store: `projects` index, `current`, `project:<id>`, undo `history:<id>`; migrates the old single `project`/`history` keys; localStorage fallback), `HS.ready`, `HS.openProject/newProject/addProject/duplicateProject/deleteProject`, undo snapshots (`HS.snapshot`/`HS.restoreSnapshot`, last 10 per project), utils, `HS.callClaude` |
+| `assets/app.js` | `window.HS` namespace: project state + multiple projects in IndexedDB (`hs` db, `kv` store: `projects` index, `current`, `project:<id>`, undo `history:<id>`; migrates the old single `project`/`history` keys; localStorage fallback), `HS.ready`, `HS.openProject/newProject/addProject/duplicateProject/deleteProject`, undo snapshots (`HS.snapshot`/`HS.restoreSnapshot`, last 10 per project), utils, `HS.callClaude` (SDK `maxRetries: 4`, `HS.cancelAI` aborts active streams, `HS.whyFail` maps status codes to Korean messages) |
 | `assets/scriptgen.js` | Source → script. `HS.generateAI` (schema `HS.SCRIPT_SCHEMA`), offline `HS.generateSimple`, `HS.rewriteScene`, `HS.factCheck`; `HS.userContent` puts attached PDFs/images first as document/image blocks with `cache_control` on the last one |
 | `assets/board.js` | Board line syntax (`HS.parseBoardLine`), chalkboard background, `HS.drawBoardSlide` (with `progress` for the writing animation), `HS.boardChars` |
 | `assets/scene-art.js` | Procedural mood backgrounds for scenes without an image (`HS.drawSceneArt`) |
@@ -40,6 +40,8 @@ the app chose by wrapping `HS.download`.
 | `assets/map.js` | Equirectangular map on Natural Earth coastlines, regions (shaded polygons), places, animated route arrows (`HS.drawMap`, `HS.mapView`, `HS.mapUnproject`) |
 | `assets/chalk.js` | Adaptive-threshold ink extraction + chalk texture (`HS.convertToChalk`), drawing-reveal animation (`HS.drawChalkReveal`), photo stroke tracing (`HS.traceStrokes`: Zhang-Suen thinning + nearest-next ordering) |
 | `assets/export.js` | PPTX export via PptxGenJS: `HS.exportStoryPptx`, `HS.exportBoardPptx` |
+| `assets/character.js` | "My characters": `HS.makeSticker` (removes only paper connected to the border via flood fill, optional chalk/outline), `HS.addCharacter`, `HS.drawSceneCharacter` (enter, bob, bounce while speaking) |
+| `assets/package.js` | `HS.exportAll` (JSZip from the PptxGenJS bundle → one ZIP with everything), one-click pipeline `HS.runPipeline` / `HS.stopPipeline` / `HS.estimateCost` |
 | `assets/lesson.js` | ⑨ tab: `HS.generateLessonAI` / `HS.generateLessonSimple`, `HS.worksheetHtml(teacher)` (print-ready HTML), `HS.exportQuizPptx` (question → answer slides); wires its own UI |
 | `assets/upload.js` | ⑧ tab: `HS.srt` (from `HS.subtitleCues`, same timing as burned-in subtitles), `HS.chapters`, `HS.generateUploadAI` / `HS.uploadSimple`, `HS.drawThumbnail`; wires its own UI |
 | `assets/ui.js` | Wires tabs, inputs and buttons |
@@ -56,13 +58,14 @@ the app chose by wrapping `HS.download`.
 { version, id, title, aspect('16:9'|'9:16'), source, sourceFiles:[{name, mediaType, data(base64), size}], options:{length,audience,tone}, mapStyle,
   bgm:{name, data(dataURL), dur, volume, duck}|null,
   scenes:[{heading, narration, visual, prompt, mood, motion, useMap,
-           caption, transition(fade|ink|wipe|cut),
+           caption, transition(fade|ink|wipe|cut), keywords[] (yellow in subtitles), character:{id, side}|null,
            image(dataURL|null), svg(string|null), audio(dataURL|null), audioDur, dur(seconds override|null)}],
   board:[{title, text, drawing(dataURL|null), dw, dh}],
   map:{title, view([lon0,lat0,lon1,lat1]|null=auto), places:[{name,lon,lat,kind}], routes:[{from,to,label}],
        regions:[{name,color,points:[[lon,lat],...]}]},
   checks:{at, summary, items:[{scene(1-based), claim, verdict(ok|unsupported|wrong|debated), note, quote}]}|null,
   upload:{titles, description, tags, thumbTexts, pinned}|null, thumb:{scene, main, sub, color, layout}|null,
+  characters:[{id, name, image(PNG dataURL), w, h}],
   lesson:{goals, quiz:[{type(choice|ox|short), question, choices, answer, explain, scene}], summary('[[key]]' marks blanks), activity:{title, steps}, discussion}|null }
 ```
 Scene picture priority: `useMap` → `image` → `svg` → procedural background.
@@ -77,6 +80,7 @@ Drawing code sizes things by `Math.min(w, h) / 720` so the same code serves 16:9
 - UI text and comments are Korean (polite 해요체/합니다체 in the UI).
 - `localStorage` keys are prefixed `hs.` (key, model, cost, tab, format). The project itself lives in IndexedDB. Backups never include `hs.key`.
 - Keep the mobile layout free of horizontal overflow (tested).
+- `.btn` sets `display`, so a global `[hidden]{display:none !important}` keeps the `hidden` attribute working.
 - After visual changes, look at screenshots (`node tools/screens.mjs`), not just the tests.
 
 ## Ideas / next steps

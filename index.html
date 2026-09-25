@@ -20,6 +20,7 @@
 }
 :root[data-theme="dark"]{ --bg:#1b1916; --panel:#24211d; --ink:#ece6da; --muted:#a59a8b; --line:#3b362f; --accent:#d0574a; }
 *{ box-sizing:border-box; }
+[hidden]{ display:none !important; }
 html,body{ margin:0; background:var(--bg); color:var(--ink); font-family:var(--sans); font-size:15px; line-height:1.55; }
 header{ display:flex; align-items:center; gap:12px; padding:12px 16px; border-bottom:1px solid var(--line); background:var(--panel); position:sticky; top:0; z-index:5; flex-wrap:wrap; }
 header h1{ font-family:var(--serif); font-size:20px; margin:0; letter-spacing:.02em; }
@@ -70,6 +71,18 @@ table.places input{ width:100%; padding:4px 6px; }
 .timeline{ display:flex; height:34px; margin-top:6px; border-radius:6px; overflow:hidden; border:1px solid var(--line); cursor:pointer; }
 .timeline div{ flex:none; min-width:0; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; font-size:11px; line-height:34px; padding:0 4px; color:#fff; border-right:1px solid rgba(255,255,255,.35); }
 .timeline div.on{ outline:3px solid var(--accent); outline-offset:-3px; }
+.char{ display:flex; flex-direction:column; align-items:center; gap:4px; padding:6px; border:1px solid var(--line); border-radius:8px; background:var(--panel); }
+.char img{ height:70px; max-width:110px; object-fit:contain; }
+.char input{ width:100px; padding:2px 4px; font-size:13px; }
+#prompter{ position:fixed; inset:0; background:#111; color:#f4efe4; z-index:50; display:flex; flex-direction:column; }
+#prompter[hidden]{ display:none; }
+.pr-top{ display:flex; gap:14px; align-items:center; padding:12px 18px; border-bottom:1px solid #333; flex-wrap:wrap; }
+.pr-top b{ flex:1; font-family:var(--serif); font-size:20px; }
+#pr-state{ font-size:14px; padding:2px 10px; border-radius:999px; background:#333; }
+#pr-state.rec{ background:#c0392b; }
+#pr-text{ flex:1; overflow:auto; padding:5vh 8vw; font-size:44px; line-height:1.6; font-weight:700; word-break:keep-all; }
+.pr-bottom{ display:flex; gap:8px; flex-wrap:wrap; justify-content:center; padding:12px; border-top:1px solid #333; }
+.pr-bottom .btn{ background:#222; color:#eee; border-color:#444; } .pr-bottom .btn.primary{ background:var(--accent); border-color:var(--accent); }
 .check{ border-left:4px solid var(--line); padding:6px 10px; margin:6px 0; background:var(--bg); border-radius:6px; font-size:14px; }
 .check.wrong{ border-color:#c0392b; } .check.unsupported{ border-color:#d68910; } .check.debated{ border-color:#7d6bb3; } .check.ok{ border-color:#3c8d5a; }
 .check q{ display:block; color:var(--muted); font-size:13px; margin-top:2px; }
@@ -127,7 +140,19 @@ table.places input{ width:100%; padding:4px 6px; }
     </div>
     <div class="row" style="margin-top:10px">
       <button class="btn primary" id="btn-generate">대본 만들기</button>
+      <button class="btn" id="pipe-open" title="대본부터 그림·사실 확인·업로드 정보·수업 자료까지 차례로">✨ 한 번에 만들기</button>
       <span class="status" id="gen-status"></span>
+    </div>
+    <div id="pipe-card" hidden style="margin-top:10px;padding:10px;border:1px dashed var(--line);border-radius:8px">
+      <b>한 번에 만들기</b> <span class="small">고른 것을 차례로 만듭니다. 도중에 멈춰도 만든 것은 남습니다.</span>
+      <div id="pipe-steps" style="margin:8px 0"></div>
+      <div class="row">
+        <button class="btn primary" id="pipe-run">시작</button>
+        <button class="btn" id="pipe-stop" hidden>멈추기</button>
+        <span class="small" id="pipe-cost"></span>
+      </div>
+      <div id="pipe-log" style="margin-top:8px;font-size:14px"></div>
+      <div class="row" style="margin-top:6px"><button class="btn primary" id="pipe-zip" hidden>📦 모두 받기 (ZIP)</button><span class="status" id="pipe-zip-status"></span></div>
     </div>
     <p class="small">설정에서 Anthropic API 키를 넣으면 Claude가 대본·판서·지도까지 한 번에 짜 줍니다. 키가 없으면 소스 문장을 장면으로 나누는 간이 방식으로 만듭니다.</p>
   </div>
@@ -171,6 +196,7 @@ table.places input{ width:100%; padding:4px 6px; }
       <div class="row" style="margin-top:8px">
         <button class="btn" id="vid-play">재생</button>
         <button class="btn primary" id="vid-record">영상 녹화</button>
+        <button class="btn" id="vid-prompter" title="대본을 크게 띄워 놓고 장면을 차례로 녹음합니다">🎙 프롬프터 녹음</button>
         <button class="btn" id="vid-draw-all" title="그림이 없는 장면을 Claude가 차례로 그립니다">빈 장면 모두 AI로 그리기</button>
         <label class="inline"><input type="checkbox" id="vid-subs" checked> 자막</label>
         <span class="status" id="vid-status"></span>
@@ -186,6 +212,15 @@ table.places input{ width:100%; padding:4px 6px; }
           <label class="inline">크기 <input type="range" id="bgm-vol" min="0" max="1" step="0.05" value="0.25"></label>
           <label class="inline"><input type="checkbox" id="bgm-duck" checked> 말할 때 줄이기</label>
           <button class="btn" id="bgm-remove">빼기</button>
+        </div>
+      </div>
+      <div class="card" style="background:var(--bg)">
+        <b>내 캐릭터</b>
+        <p class="small">⑦ 손그림 탭에서 "영상 캐릭터로 저장"하거나 그림 파일을 넣으세요. 종이 바탕은 저절로 지워집니다. 장면마다 등장시킬 수 있습니다.</p>
+        <div id="char-list" class="row"></div>
+        <div class="row" style="margin-top:6px">
+          <label class="btn">캐릭터 그림 파일<input type="file" id="char-file" accept="image/*" hidden></label>
+          <button class="btn" id="char-all">모든 장면에 첫 캐릭터 넣기</button>
         </div>
       </div>
       <b>장면별 그림과 움직임</b>
@@ -282,6 +317,11 @@ table.places input{ width:100%; padding:4px 6px; }
         <button class="btn" id="chalk-png">PNG 받기</button>
         <button class="btn" id="chalk-record" title="여기서 그린 획 순서대로(사진은 위에서 아래로) 분필 그림이 그려지는 영상">그리는 영상 녹화</button>
         <button class="btn primary" id="chalk-to-board">판서 PPT의 현재 장에 넣기</button>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <button class="btn primary" id="chalk-to-char">영상 캐릭터로 저장</button>
+        <label class="inline"><input type="checkbox" id="char-chalk"> 분필 그림으로</label>
+        <label class="inline"><input type="checkbox" id="char-outline" checked> 흰 테두리</label>
         <span class="status" id="chalk-status"></span>
       </div>
     </div>
@@ -296,7 +336,7 @@ table.places input{ width:100%; padding:4px 6px; }
       <div class="card">
         <b>자막과 챕터</b>
         <p class="small">자막 파일(.srt)은 유튜브 스튜디오 → 자막 → 파일 업로드로 올리면 됩니다. 영상 속 자막과 같은 시각으로 맞춰져 있습니다.</p>
-        <div class="row"><button class="btn primary" id="up-srt">자막 .srt 받기</button><button class="btn" id="up-copy-chapters">챕터 복사</button></div>
+        <div class="row"><button class="btn primary" id="up-zip" title="대본·자막·PPT·학습지·썸네일·지도·장면 그림을 ZIP 하나로">📦 모두 받기 (ZIP)</button><button class="btn" id="up-srt">자막 .srt 받기</button><button class="btn" id="up-copy-chapters">챕터 복사</button></div>
         <textarea id="up-chapters" readonly style="min-height:120px;margin-top:8px"></textarea>
         <p class="small" id="up-chapter-note"></p>
       </div>
@@ -312,6 +352,7 @@ table.places input{ width:100%; padding:4px 6px; }
       <div class="row" style="margin-top:8px">
         <label class="inline">배경 <select id="thumb-scene"></select></label>
         <label class="inline">색 <select id="thumb-color"><option value="yellow">노랑</option><option value="red">빨강</option><option value="white">흰색</option></select></label>
+        <label class="inline">캐릭터 <select id="thumb-character"></select></label>
         <label class="inline">글씨 자리 <select id="thumb-layout"><option value="left">왼쪽</option><option value="right">오른쪽</option></select></label>
       </div>
       <label class="small" style="display:block;margin-top:8px">큰 글씨 (줄 바꿈으로 두 줄)<textarea id="thumb-main" style="min-height:60px"></textarea></label>
@@ -371,6 +412,17 @@ table.places input{ width:100%; padding:4px 6px; }
 </section>
 
 </main>
+<div id="prompter" hidden>
+  <div class="pr-top"><span id="pr-pos"></span><b id="pr-head"></b><span id="pr-state"></span></div>
+  <div id="pr-text"></div>
+  <div class="pr-bottom">
+    <button class="btn" id="pr-prev">◀ 앞 장면</button>
+    <button class="btn primary" id="pr-rec">● 녹음 시작</button>
+    <button class="btn" id="pr-next" title="스페이스 키">저장하고 다음 ▶</button>
+    <button class="btn" id="pr-close">끝내기</button>
+    <label class="inline" style="color:#ccc">글씨 <input type="range" id="pr-size" min="28" max="72" value="44"></label>
+  </div>
+</div>
 <script src="assets/vendor/pptxgen.bundle.js"></script>
 <script src="content/geo.js"></script>
 <script src="content/places.js"></script>
@@ -381,12 +433,14 @@ table.places input{ width:100%; padding:4px 6px; }
 <script src="assets/scene-art.js"></script>
 <script src="assets/ai-art.js"></script>
 <script src="assets/voice.js"></script>
+<script src="assets/character.js"></script>
 <script src="assets/map.js"></script>
 <script src="assets/video.js"></script>
 <script src="assets/chalk.js"></script>
 <script src="assets/export.js"></script>
 <script src="assets/upload.js"></script>
 <script src="assets/lesson.js"></script>
+<script src="assets/package.js"></script>
 <script src="assets/ui.js"></script>
 </body>
 </html>

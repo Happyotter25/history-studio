@@ -97,6 +97,13 @@
     var left = t.layout !== 'right', g = ctx.createLinearGradient(left ? 0 : w, 0, left ? w : 0, 0);
     g.addColorStop(0, 'rgba(0,0,0,.75)'); g.addColorStop(0.6, 'rgba(0,0,0,.25)'); g.addColorStop(1, 'rgba(0,0,0,0)');
     ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
+    // 내 캐릭터는 글씨 반대쪽에 크게
+    var ch = t.character && HS.characterById(t.character), cimg = HS.characterImage(ch);
+    if(cimg){
+      var chH = h * 0.9, chW = chH * cimg.width / cimg.height;
+      if(chW > w * 0.42){ chW = w * 0.42; chH = chW * cimg.height / cimg.width; }
+      ctx.drawImage(cimg, left ? w - chW - w * 0.03 : w * 0.03, h - chH, chW, chH);
+    }
     var th = THEMES[t.color] || THEMES.yellow, u = w / 1280, x = left ? 60 * u : w - 60 * u;
     var lines = String(t.main || '').split('\n').filter(Boolean).slice(0, 3);
     var size = (lines.length > 2 ? 120 : 150) * u;
@@ -144,6 +151,7 @@
     if(!t.main) t.main = (u && u.thumbTexts[0]) || p.title || '';
     $('thumb-main').value = t.main; $('thumb-sub').value = t.sub || '';
     $('thumb-color').value = t.color; $('thumb-layout').value = t.layout;
+    $('thumb-character').innerHTML = '<option value="">없음</option>' + (p.characters || []).map(function(c){ return '<option value="' + c.id + '"' + (t.character === c.id ? ' selected' : '') + '>' + HS.esc(c.name) + '</option>'; }).join('');
     $('thumb-suggest').innerHTML = u && u.thumbTexts ? u.thumbTexts.map(function(x){ return '<button class="btn" data-thumb="' + HS.esc(x) + '">' + HS.esc(x.replace(/\n/g, ' / ')) + '</button>'; }).join(' ') : '';
     drawThumb();
   };
@@ -172,7 +180,7 @@
     if(e.target.id === 'up-desc') u.description = e.target.value.replace('\n\n' + HS.chaptersText(), '');
     HS.changed('upload');
   });
-  ['thumb-scene', 'thumb-main', 'thumb-sub', 'thumb-color', 'thumb-layout'].forEach(function(id){
+  ['thumb-scene', 'thumb-main', 'thumb-sub', 'thumb-color', 'thumb-layout', 'thumb-character'].forEach(function(id){
     $(id).addEventListener('input', function(){
       var t = thumbOpts(), k = id.slice(6);
       t[k] = k === 'scene' ? +this.value : this.value;

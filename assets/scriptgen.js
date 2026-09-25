@@ -16,7 +16,7 @@
       title: { type: 'string' },
       scenes: { type: 'array', items: {
         type: 'object', additionalProperties: false,
-        required: ['heading', 'narration', 'visual', 'prompt', 'mood', 'motion', 'use_map', 'caption', 'transition'],
+        required: ['heading', 'narration', 'visual', 'prompt', 'mood', 'motion', 'use_map', 'caption', 'transition', 'keywords'],
         properties: {
           heading: { type: 'string' },
           narration: { type: 'string' },
@@ -26,7 +26,8 @@
           motion: { type: 'string', enum: MOTIONS },
           use_map: { type: 'boolean' },
           caption: { type: 'string' },
-          transition: { type: 'string', enum: TRANSITIONS }
+          transition: { type: 'string', enum: TRANSITIONS },
+          keywords: { type: 'array', items: { type: 'string' } }
         } } },
       board: { type: 'array', items: {
         type: 'object', additionalProperties: false,
@@ -73,6 +74,7 @@
       '  - motion: 카메라 움직임 ' + MOTIONS.join('|') + ' 가운데 하나. 이웃 장면끼리 겹치지 않게.',
       '  - caption: 화면 왼쪽 위에 띄울 짧은 이름표. "1592년 4월 · 부산"처럼 연도·장소, 또는 "이순신 (1545~1598)"처럼 처음 나오는 인물. 20자 이내, 없으면 빈 문자열.',
       '  - transition: 앞 장면에서 넘어오는 방식 fade(부드럽게)|ink(먹 번짐, 시대·분위기가 크게 바뀔 때)|wipe(붓으로 쓸기, 장소 이동)|cut(바로, 긴박한 장면). 대부분 fade.',
+      '  - keywords: 자막에서 노랗게 강조할 핵심어 1~4개(인물·연도·장소·개념). narration 에 글자 그대로 들어 있는 말만.',
       '  - use_map: 이 장면을 삽화 대신 지도(경로가 그려지는 모습)로 보여 주는 편이 좋으면 true. 전쟁의 진격로, 천도, 영토 변화 같은 장면. 영상 전체에서 1~3개.',
       '- board: 칠판 판서 슬라이드 3~6장. lines 는 칠판에 쓸 짧은 줄들이다.',
       '  줄 앞 "-" 는 들여쓰기, "*" 는 노란 분필(핵심어·연도), "!" 는 분홍 분필(주의·반전), "[ ]" 로 감싸면 네모 칸, "→" 로 인과를 잇는다. 한 장에 8줄 이하.',
@@ -112,7 +114,7 @@
     var p = HS.project;
     p.title = p.title || d.title;
     p.scenes = d.scenes.map(function(s){
-      return { heading: s.heading, narration: s.narration, visual: s.visual, prompt: s.prompt, mood: s.mood, motion: s.motion, useMap: !!s.use_map, caption: s.caption || '', transition: s.transition || 'fade', image: null };
+      return { heading: s.heading, narration: s.narration, visual: s.visual, prompt: s.prompt, mood: s.mood, motion: s.motion, useMap: !!s.use_map, caption: s.caption || '', transition: s.transition || 'fade', keywords: (s.keywords || []).filter(function(k){ return k && s.narration.indexOf(k) >= 0; }), image: null };
     });
     p.board = d.board.map(function(b){ return { title: b.title, text: b.lines.join('\n'), drawing: null }; });
     p.map = { title: d.map.title, view: null, places: d.map.places, routes: d.map.routes, regions: (d.map.regions || []).filter(function(r){ return r.points && r.points.length > 2; }) };
@@ -157,6 +159,11 @@
   }
   HS.findPlaces = findPlaces;
 
+  // 간이 핵심어: 연도와 지명
+  function keywordsOf(text){
+    var k = (text.match(/\d{3,4}년/g) || []).concat(findPlaces(text).map(function(p){ return p.name; }).filter(function(n){ return text.indexOf(n) >= 0; }));
+    return k.filter(function(x, i){ return k.indexOf(x) === i; }).slice(0, 4);
+  }
   // 간이 이름표: 첫 연도(월까지)와 처음 나오는 지명
   function captionOf(text){
     var y = text.match(/\d{3,4}년(\s*\d{1,2}월)?/), pl = findPlaces(text)[0];
@@ -176,7 +183,7 @@
         heading: headingOf(chunk[0]), narration: text,
         visual: headingOf(chunk[0]) + ' 장면을 그린 삽화',
         prompt: 'Korean history webtoon illustration, soft painterly, ' + headingOf(chunk[0]) + ', historically accurate costume and architecture, no text, no watermark',
-        mood: guessMood(text), motion: MOTIONS[scenes.length % MOTIONS.length], caption: captionOf(text), image: null
+        mood: guessMood(text), motion: MOTIONS[scenes.length % MOTIONS.length], caption: captionOf(text), keywords: keywordsOf(text), image: null
       });
     }
     scenes.unshift({ heading: title, narration: '오늘은 ' + title + ' 이야기를 해 보겠습니다.', visual: '제목 화면', prompt: '', mood: 'dusk', motion: 'zoomIn', image: null });

@@ -21,8 +21,9 @@
   };
   function sentences(t){ return (String(t || '').match(/[^.!?。]+[.!?。]?/g) || []).map(function(s){ return s.trim(); }).filter(Boolean); }
 
-  function save(pptx, name){
-    return pptx.write({ outputType: 'blob' }).then(function(blob){ HS.download(name, blob); return blob; });
+  // noDownload 이면 파일로 내려받지 않고 Blob 만 돌려줍니다 (모두 받기 ZIP 에 쓸 때)
+  function save(pptx, name, noDownload){
+    return pptx.write({ outputType: 'blob' }).then(function(blob){ if(!noDownload) HS.download(name, blob); return blob; });
   }
 
   var THEMES = {
@@ -66,13 +67,14 @@
         ms.addImage({ data: mc.toDataURL('image/jpeg', 0.9), x: 0, y: 0, w: W, h: H });
         ms.addNotes(p.map.routes.map(function(r){ return r.from + ' → ' + r.to + (r.label ? ' : ' + r.label : ''); }).join('\n'));
       }
-      return save(pptx, HS.fileName(' 스토리.pptx'));
+      return save(pptx, HS.fileName(' 스토리.pptx'), opt.noDownload);
     });
   };
 
   var CHALK_HEX = { white: 'F3F1E7', yellow: 'F6E27A', pink: 'F4A6B8', blue: '9FD3F0' };
 
-  HS.exportBoardPptx = function(){
+  HS.exportBoardPptx = function(opt){
+    opt = opt || {};
     var p = HS.project;
     if(!p.board.length) return Promise.reject(new Error('판서가 비어 있습니다'));
     var pptx = new window.PptxGenJS();
@@ -105,6 +107,6 @@
         sl.addImage({ data: b.drawing, x: 8.3 + (4.5 - dw) / 2, y: 1.5 + (5.4 - dh) / 2, w: dw, h: dh });
       }
     });
-    return save(pptx, HS.fileName(' 판서.pptx'));
+    return save(pptx, HS.fileName(' 판서.pptx'), opt.noDownload);
   };
 })();

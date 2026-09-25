@@ -35,4 +35,21 @@ await pg.evaluate(() => { HS.project.aspect = '9:16'; HS.changed('aspect'); });
 await pg.click('#tabs button[data-tab=video]'); await pg.waitForTimeout(300);
 await pg.evaluate(() => { const c = document.getElementById('video-canvas'), tl = HS.timeline(); HS.drawVideoFrame(c.getContext('2d'), c.width, c.height, tl[1].start + 3, {}); });
 await pg.locator('#video-canvas').screenshot({ path: path.join(root, 'docs/shorts.png') });
+// 내 캐릭터가 나오는 장면
+await pg.evaluate(() => {
+  HS.project.aspect = '16:9';
+  const c = document.createElement('canvas'); c.width = 500; c.height = 600; const x = c.getContext('2d');
+  x.fillStyle = '#efe9dc'; x.fillRect(0, 0, 500, 600); x.lineWidth = 7; x.strokeStyle = '#222';
+  x.fillStyle = '#fff'; x.beginPath(); x.ellipse(250, 300, 120, 140, 0, 0, 7); x.fill(); x.stroke();
+  x.fillStyle = '#222'; x.beginPath(); x.ellipse(250, 150, 190, 22, 0, 0, 7); x.fill(); x.fillRect(190, 60, 120, 95);
+  x.beginPath(); x.arc(205, 290, 10, 0, 7); x.arc(295, 290, 10, 0, 7); x.fill();
+  x.beginPath(); x.arc(250, 340, 40, 0.3, 2.8); x.stroke();
+  x.fillStyle = '#3a6ea5'; x.fillRect(150, 440, 200, 150); x.strokeRect(150, 440, 200, 150);
+  HS.addCharacter('선비', HS.makeSticker(c, { outline: true }));
+  HS.project.scenes.forEach((s, i) => { if (i) s.character = { id: HS.project.characters[0].id, side: 'left' }; });
+  HS.changed('all');
+});
+await pg.click('#tabs button[data-tab=video]'); await pg.waitForTimeout(400);
+await pg.evaluate(async () => { await HS.preloadImages(); const c = document.getElementById('video-canvas'), tl = HS.timeline(); HS.drawVideoFrame(c.getContext('2d'), c.width, c.height, tl[1].start + 3, {}); });
+await pg.locator('#video-canvas').screenshot({ path: path.join(root, 'docs/character.png') });
 await b.close();
