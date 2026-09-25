@@ -1,0 +1,15 @@
+{
+  "name": "history-studio",
+  "private": true,
+  "description": "사관 스튜디오 — 역사 유튜브 제작 도구 (소스→대본→삽화 영상·스토리 PPT·지도·판서 PPT·손그림 판서 변환)",
+  "scripts": {
+    "vendor": "node tools/vendor.mjs",
+    "test": "node tests/e2e.mjs"
+  },
+  "devDependencies": {
+    "playwright": "1.56.1",
+    "pptxgenjs": "4.0.1",
+    "topojson-client": "3.1.0",
+    "world-atlas": "2.0.2"
+  }
+}

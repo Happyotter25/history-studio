@@ -1,0 +1,25 @@
+// README 에 쓰는 화면 사진을 docs/ 에 새로 찍습니다:  node tools/screens.mjs
+import { chromium } from 'playwright';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const b = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || undefined });
+const pg = await b.newPage({ viewport: { width: 1300, height: 860 } });
+await pg.goto('file://' + path.join(root, 'index.html'));
+await pg.evaluate(() => localStorage.clear()); await pg.reload();
+await pg.click('#src-sample'); await pg.click('#btn-generate');
+await pg.screenshot({ path: path.join(root, 'docs/script.png') });
+await pg.click('#tabs button[data-tab=video]');
+await pg.evaluate(() => HS.drawVideoFrame(document.getElementById('video-canvas').getContext('2d'), 1280, 720, 12, {}));
+await pg.locator('#video-canvas').screenshot({ path: path.join(root, 'docs/video.png') });
+await pg.click('#tabs button[data-tab=map]'); await pg.waitForTimeout(300);
+await pg.locator('#map-canvas').screenshot({ path: path.join(root, 'docs/map.png') });
+await pg.click('#tabs button[data-tab=chalk]');
+await pg.evaluate(() => { const c = document.getElementById('chalk-src').getContext('2d'); c.strokeStyle = '#222'; c.fillStyle = '#222'; c.lineWidth = 6;
+  c.beginPath(); c.arc(400, 290, 140, 0, 7); c.stroke(); c.beginPath(); c.arc(345, 260, 14, 0, 7); c.fill(); c.beginPath(); c.arc(455, 260, 14, 0, 7); c.fill();
+  c.beginPath(); c.arc(400, 320, 60, 0.3, 2.8); c.stroke(); c.beginPath(); c.moveTo(250, 200); c.lineTo(400, 110); c.lineTo(550, 200); c.stroke(); HS.convertChalkNow(); });
+await pg.click('#chalk-to-board');
+await pg.locator('#tab-chalk .grid2').screenshot({ path: path.join(root, 'docs/chalk.png') });
+await pg.click('#tabs button[data-tab=board]'); await pg.waitForTimeout(300);
+await pg.locator('#board-canvas').screenshot({ path: path.join(root, 'docs/board.png') });
+await b.close();
