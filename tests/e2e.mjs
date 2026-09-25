@@ -97,6 +97,8 @@ async function open(viewport = { width: 1300, height: 900 }) {
   page.on('pageerror', e => page.errors.push(e.message));
   await page.goto(URL_);
   await page.waitForSelector('body[data-ready]');
+  page.initialTab = await page.locator('section.tab.on').getAttribute('id');
+  await page.click('#tabs button[data-tab=source]');
   return page;
 }
 // 헤드리스 크롬은 한글 파일 이름을 'download' 로 바꿔 버리므로, 앱이 붙인 이름은 HS.download 를 엿들어 봅니다
@@ -110,8 +112,9 @@ const isZip = b => b[0] === 0x50 && b[1] === 0x4b;
 
 console.log('사관 스튜디오 시험');
 
-await test('처음 열면 오류 없이 소스 탭이 보인다', async () => {
+await test('처음 열면 자료 제작이 보이고 기존 소스 도구도 열린다', async () => {
   const page = await open();
+  assert.equal(page.initialTab, 'tab-materials');
   assert.ok(await page.isVisible('#tab-source'));
   for (const t of ['script', 'video', 'story', 'map', 'board', 'chalk', 'upload', 'lesson', 'settings', 'source']) await page.click(`#tabs button[data-tab=${t}]`);
   assert.deepEqual(page.errors, []);
@@ -1248,7 +1251,7 @@ await test('이미지 기획(키 없이): 장면 설명으로 샷을 짜고, 지
 await test('휴대폰 폭에서 가로로 넘치지 않는다', async () => {
   const pg = await open({ width: 375, height: 800 });
   await pg.click('#src-sample'); await pg.click('#btn-generate');
-  for (const t of ['source', 'script', 'shots', 'video', 'story', 'map', 'board', 'chalk', 'upload', 'lesson', 'settings']) {
+  for (const t of ['materials', 'source', 'script', 'shots', 'video', 'story', 'map', 'board', 'chalk', 'upload', 'lesson', 'settings']) {
     await pg.click(`#tabs button[data-tab=${t}]`);
     const over = await pg.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
     assert.ok(over <= 0, t + ' 탭이 ' + over + 'px 넘침');
@@ -1356,6 +1359,90 @@ await test('장면 합치기: 샷 없는 삽화도 보존하고 자료 장면은
   assert.equal(result.pics.length,2); assert.ok(result.pics.every(x=>x.startsWith('data:image/png')));
   assert.equal(result.kind,'timeline'); assert.equal(result.data.events[0].year,'1597');
   await pg.context().close();
+});
+
+async function materialFixture(confirmPlan = false) {
+  const pg = await open(); await pg.click('#tabs button[data-tab=materials]');
+  await pg.click('#material-sample'); await pg.click('#material-propose');
+  if(confirmPlan) { await pg.click('#material-confirm'); await pg.waitForFunction(() => HS.materialApproved()); }
+  return pg;
+}
+await test('자료 제작: 원고를 보존하고 13구간·11삽화를 확정 전에만 제안', async () => {
+  const pg=await materialFixture();
+  const r=await pg.evaluate(async()=>{
+    let blocked='';try{await HS.exportMaterialPngs('maps',true);}catch(e){blocked=e.message;}
+    const m=HS.project.materials;return {same:m.script===MATERIAL_SAMPLE,scenes:HS.project.scenes.length,groups:m.groups.length,pics:m.groups.filter(g=>g.kind==='illust').reduce((n,g)=>n+g.count,0),body:m.groups.map(g=>g.text).join('\n\n'),source:MATERIAL_SAMPLE,blocked};
+  });
+  assert.ok(r.same);assert.equal(r.scenes,0);assert.equal(r.groups,13);assert.equal(r.pics,11);
+  assert.equal(r.body,r.source.split('\n\n').slice(1).join('\n\n'));assert.match(r.blocked,/확정/);
+  assert.ok(await pg.locator('#material-output').isHidden());await pg.context().close();
+});
+await test('자료 제작: 선택·그림 수·판서 수정은 확정 후 적용되고 다시 열어도 남음', async()=>{
+  const pg=await materialFixture();
+  await pg.locator('[data-material-index="0"] [data-m=selected]').uncheck();
+  await pg.locator('[data-material-index="1"] [data-m=count]').selectOption('3');
+  await pg.locator('[data-material-index="1"] [data-m=board]').fill('*직접 고친 판서\n→ 다음 단계');
+  assert.equal(await pg.evaluate(()=>HS.project.scenes.length),0);
+  await pg.click('#material-confirm');await pg.waitForFunction(()=>HS.materialApproved());
+  assert.equal(await pg.evaluate(()=>HS.project.scenes.length),12);
+  assert.equal(await pg.evaluate(()=>HS.project.scenes[0].shots.length),3);
+  assert.equal(await pg.evaluate(()=>HS.project.board[0].text),'*직접 고친 판서\n→ 다음 단계');
+  await pg.evaluate(()=>HS.persist());await pg.reload();await pg.waitForSelector('body[data-ready]');
+  assert.ok(await pg.evaluate(()=>HS.materialApproved()));assert.deepEqual(pg.errors,[]);await pg.context().close();
+});
+await test('자료 기획 JSON: 원고·ID 검증, 원문 불변, 잘못된 형식은 원자적으로 거절',async()=>{
+  const pg=await materialFixture();
+  const r=await pg.evaluate(()=>{
+    const original=HS.materialPlanFile(),errors=[];
+    for(const mutate of [d=>d.script+='x',d=>d.groups[0].id='wrong',d=>d.groups[0].count=9,d=>d.groups[0].kind='unknown']){
+      const d=JSON.parse(JSON.stringify(original));mutate(d);try{HS.importMaterialPlan(d);}catch(e){errors.push(e.message);}
+    }
+    const unchanged=JSON.stringify(original)===JSON.stringify(HS.materialPlanFile());
+    const d=JSON.parse(JSON.stringify(original));d.groups[0].brief='수정한 기획';d.groups[0].text='원고를 바꾸려는 값';d.groups[0].title='<img src=x onerror=alert(1)>';
+    HS.importMaterialPlan(d);HS.renderMaterials();
+    return {errors:errors.length,unchanged,text:HS.project.materials.groups[0].text,original:original.groups[0].text,brief:HS.project.materials.groups[0].brief,images:document.querySelectorAll('#material-groups img').length};
+  });
+  assert.equal(r.errors,4);assert.ok(r.unchanged);assert.equal(r.text,r.original);assert.equal(r.brief,'수정한 기획');assert.equal(r.images,0);
+  await pg.context().close();
+});
+await test('자료 출력: 지도·인용·판서 PNG와 원고 노트가 있는 스토리 PPT, 빈 그림은 완료로 내보내지 않음',async()=>{
+  const pg=await materialFixture(true);
+  const r=await pg.evaluate(async()=>{
+    const counts={};for(const k of ['maps','figures','board']){const z=await JSZip.loadAsync(await HS.exportMaterialPngs(k,true));counts[k]=Object.keys(z.files).filter(n=>n.endsWith('.png')).length;}
+    let missing='';try{await HS.exportMaterialPngs('images',true);}catch(e){missing=e.message;}
+    const z=await JSZip.loadAsync(await HS.exportStoryPptx({allScenes:true,map:false,noDownload:true}));
+    const slides=Object.keys(z.files).filter(n=>/^ppt\/slides\/slide\d+\.xml$/.test(n));
+    const notes=await Promise.all(Object.keys(z.files).filter(n=>/^ppt\/notesSlides\/notesSlide\d+\.xml$/.test(n)).map(n=>z.file(n).async('string')));
+    const plain=notes.map(x=>new DOMParser().parseFromString(x,'text/xml').documentElement.textContent).join('\n');
+    return {counts,missing,slides:slides.length,hasQuote:plain.includes('무슨 말을 하리오'),hasEnding:plain.includes('다음 주 이 시간'),routes:HS.project.map.routes.length};
+  });
+  assert.deepEqual(r.counts,{maps:1,figures:4,board:13});assert.match(r.missing,/그림을 먼저/);assert.equal(r.slides,14);assert.ok(r.hasQuote&&r.hasEnding);assert.equal(r.routes,0);
+  assert.match(await pg.textContent('#material-story'),/초안/);await pg.context().close();
+});
+await test('자료 그림: 구독 주문서 파일명으로 가져오기, PNG 크기, 재확정 시 보존·변경된 지시는 다시 그리기',async()=>{
+  const pg=await materialFixture(true);
+  const file=await pg.evaluate(()=>{const sh=HS.project.scenes[0].shots[0],c=document.createElement('canvas');c.width=16;c.height=9;c.getContext('2d').fillRect(0,0,16,9);return {name:HS.shotFile(0,0,sh),data:c.toDataURL().split(',')[1]};});
+  await pg.setInputFiles('#material-images',{name:file.name,mimeType:'image/png',buffer:Buffer.from(file.data,'base64')});
+  await pg.waitForFunction(()=>HS.project.scenes[0].shots[0].image);
+  const r=await pg.evaluate(async()=>{
+    const z=await JSZip.loadAsync(await HS.exportMaterialPngs('images',true)),n=Object.keys(z.files).find(n=>n.endsWith('.png')),bytes=await z.file(n).async('uint8array');
+    const view=new DataView(bytes.buffer),image=HS.project.scenes[0].shots[0].image,id=HS.project.scenes[0].shots[0].id;
+    await HS.confirmMaterials();const kept=HS.project.scenes[0].shots[0].image===image&&HS.project.scenes[0].shots[0].id===id;
+    HS.project.materials.groups[0].brief+=' 장면 수정';await HS.confirmMaterials();
+    return {w:view.getUint32(16),h:view.getUint32(20),kept,redo:HS.project.scenes[0].shots[0].redo,pending:HS.pendingShots('missing').length};
+  });
+  assert.equal(r.w,1920);assert.equal(r.h,1080);assert.ok(r.kept&&r.redo);assert.equal(r.pending,11);await pg.context().close();
+});
+await test('자료 제작: 확정 뒤 원고 변경·미등록 지명은 출력·확정을 막고 일반 대본도 제안',async()=>{
+  const pg=await materialFixture(true);
+  const r=await pg.evaluate(async()=>{
+    HS.project.materials.script+='수정';let stale='';try{await HS.confirmMaterials();}catch(e){stale=e.message;}
+    HS.project.materials=HS.proposeMaterials('다른 역사 원고\n\n부산으로 이동했습니다.\n\n“인용문입니다.”');
+    const generic=HS.project.materials.method;HS.project.materials.groups[0].kind='map';HS.project.materials.groups[0].places=['없는 지명'];
+    let unknown='';try{await HS.confirmMaterials();}catch(e){unknown=e.message;}
+    return {stale,unknown,generic,scenes:HS.project.scenes.length};
+  });
+  assert.match(r.stale,/대본이 바뀌/);assert.match(r.unknown,/등록 지명/);assert.match(r.generic,/초안/);assert.equal(r.scenes,13);await pg.context().close();
 });
 
 await browser.close();

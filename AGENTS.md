@@ -25,8 +25,12 @@ Never rewrite older entries; correct them in a new entry.
 
 ## What this is
 A static web app that helps a Korean high-school history teacher make history YouTube videos.
-Pipeline: source text → script (scenes) → animated illustration video (WebM), story PPTX,
-historical map (PNG / WebM), blackboard-style PPTX, and hand drawing → chalk drawing.
+Primary workflow: finished narration → editable material proposal → explicit user confirmation →
+subscription image order/import, separate illustration/map/quote/comparison/board PNG ZIPs, story PPTX and board PPTX.
+The user prefers Codex/ChatGPT subscriptions, not paid API automation. Do not rewrite finished narration or generate
+all illustrations before the proposal is confirmed. Video rendering is a secondary legacy tool.
+General proposals use local paragraph/quote/place rules, not AI reasoning; the provided Myeongnyang script has a curated example plan.
+Optional subscription planning handoff exports an editable plan JSON + instructions and validates returned identity/types before import.
 Talk to the user in Korean. They prefer you to proceed without asking many questions.
 This repo was started from the same author's 어전회의 (eojeon) project and follows its conventions.
 
@@ -42,7 +46,7 @@ This repo was started from the same author's 어전회의 (eojeon) project and f
 ```
 npm run setup     # npm install + npx playwright install chromium (needs internet)
 npm run check     # syntax of every script + index.html script list (offline, a second)
-npm test          # node tests/e2e.mjs — 68 Playwright tests (Chromium runs with a fake microphone);
+npm test          # node tests/e2e.mjs — 74 Playwright tests (Chromium runs with a fake microphone);
                   # Claude / OpenAI / Gemini / YouTube oEmbed are all mocked, so no keys or network are needed
 ```
 Codex sandboxes usually have no network while the agent runs: do `npm run setup` in the environment's setup
@@ -74,6 +78,9 @@ the app chose by wrapping `HS.download`.
 | `assets/package.js` | `HS.exportAll` (JSZip from the PptxGenJS bundle → one ZIP with everything), one-click pipeline `HS.runPipeline` / `HS.stopPipeline` / `HS.estimateCost` |
 | `assets/lesson.js` | ⑨ tab: `HS.generateLessonAI` / `HS.generateLessonSimple`, `HS.worksheetHtml(teacher)` (print-ready HTML), `HS.exportQuizPptx` (question → answer slides); wires its own UI |
 | `assets/upload.js` | ⑧ tab: `HS.descriptionSuffix` (chapters + `HS.referencesText`, appended to the description and stripped when edited), `HS.srt` (from `HS.subtitleCues`, same timing as burned-in subtitles), `HS.chapters`, `HS.generateUploadAI` / `HS.uploadSimple`, `HS.drawThumbnail`; wires its own UI |
+| `assets/materials.js` | Finished-script material planning (`proposeMaterials`, `confirmMaterials`, `materialApproved`), validated subscription plan JSON round-trip, separate 1920×1080 PNG ZIP exports. `project.materials` keeps the original script, plannedScript, proposal groups, method and an approval fingerprint. Each group has id, selected, title, text (immutable excerpt), kind, count, brief, board, detail, cite, places. Approval replaces scenes/board with strict undo snapshot; scenes carry materialId/materialPlaces. Images keep IDs/candidates on reapproval and changed prompts are marked redo. Map exports use registered locations without inferred routes. |
+| `assets/materials-ui.js` | Default material workflow UI: review/edit/confirm, subscription order/import and individual PNG/PPT download actions. Outputs blocked for stale or unconfirmed plans. |
+| `content/material-sample.js` | User-provided complete Myeongnyang narration; preserved as input, not fact-checked historical claims. |
 | `assets/ui.js` | Wires tabs, inputs and buttons |
 | `assets/scene-edit.js` | `HS.editScenes(action,index,value,options)` for split-at-cursor, merge-next, move, delete. Requires a successful undo snapshot (`HS.snapshot(label,true)`); remaps thumbnail, check and quiz scene references. Split/merge reset duration and invalidate checks; recorded audio is removed only with `resetAudio` consent from the UI. Split copies continuing shots with new IDs; merge connects illustration shots, freezes SVG/procedural backgrounds as stills, and keeps first-scene kind/data/character/transition. Blocks edits during running image queue jobs and rejects concurrent stale edits. |
 | `content/places.js` | Gazetteer (name, aliases, lon/lat, kind) used by offline map extraction — extend freely |
@@ -86,10 +93,10 @@ the app chose by wrapping `HS.download`.
 
 ## Data model (`HS.project`, saved to IndexedDB, exported as backup JSON)
 ```
-{ version, id, title, aspect('16:9'|'9:16'), source, sourceFiles:[{name, mediaType, data(base64), size}], refs:[{id, title, url, channel, transcript, role(fact|style)}], options:{length,audience,tone}, mapStyle,
+{ version, id, title, materials(null|{script,plannedScript,groups[],approved,method}), aspect('16:9'|'9:16'), source, sourceFiles:[{name, mediaType, data(base64), size}], refs:[{id, title, url, channel, transcript, role(fact|style)}], options:{length,audience,tone}, mapStyle,
   bgm:{name, data(dataURL), dur, volume, duck}|null,
   art:{style(webtoon|ink|oil|textbook|minhwa|docu), extra, cast:[{name, look}]},
-  scenes:[{heading, narration, visual, prompt, mood, motion, shots:[{id(4 chars), type(wide|scene|portrait|closeup|map), desc, prompt, sentence, places[], image, candidates[], redo, feedback}], kind(illust|map|source|timeline|people|compare), useMap(= kind is map),
+  scenes:[{materialId(optional), materialPlaces(optional), heading, narration, visual, prompt, mood, motion, shots:[{id(4 chars), type(wide|scene|portrait|closeup|map), desc, prompt, sentence, places[], image, candidates[], redo, feedback}], kind(illust|map|source|timeline|people|compare), useMap(= kind is map),
            data:{original, translation, cite, events[{year,label}], people[{name,role}], links[{from,to,label}], left, right, rows[{label,left,right}]},
            caption, transition(fade|ink|wipe|cut), keywords[] (yellow in subtitles), character:{id, side}|null,
            image(dataURL|null), svg(string|null), audio(dataURL|null), audioDur, dur(seconds override|null)}],

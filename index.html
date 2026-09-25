@@ -115,11 +115,15 @@ table.places input{ width:100%; padding:4px 6px; }
 .region input[type=text]{ flex:1; min-width:0; padding:4px 6px; }
 .region input[type=color]{ width:36px; height:30px; padding:0; border:1px solid var(--line); border-radius:6px; }
 .board-lines textarea{ min-height:140px; font-family:ui-monospace,monospace; font-size:13px; }
+#material-review,#material-output{scroll-margin-top:85px}.material-hero{padding:8px 0 16px}.material-hero h2{font-size:32px;margin:12px 0}
+.material-outputs{display:grid;grid-template-columns:1fr 1fr;gap:16px}.material-outputs>div{padding:16px;border:1px solid var(--line);border-radius:10px}.material-outputs .btn{margin:4px 4px 4px 0}
+.material-group{margin:14px 0;padding:16px;border:1px solid var(--line);border-radius:10px}.material-group h4{margin:0}.material-group textarea{min-height:95px}.material-group .excerpt{white-space:pre-wrap;max-height:240px;overflow:auto;font-size:14px;padding:12px;background:var(--bg)}.material-group label{display:block}.material-group input[type=text]{width:100%}.material-confirm{padding-top:12px}.material-confirm b{flex:1}#material-script{min-height:240px;margin-bottom:12px}
+@media(max-width:620px){.material-outputs{grid-template-columns:1fr}.material-hero h2{font-size:25px}.material-group{padding:12px}}
 </style>
 </head>
 <body>
 <header>
-  <h1>사관 스튜디오<small>역사 유튜브 제작 도구</small></h1>
+  <h1>사관 스튜디오<small>대본으로 만드는 역사 제작 자료</small></h1>
   <select id="proj-select" aria-label="프로젝트 고르기" style="max-width:180px"></select>
   <input id="proj-title" type="text" placeholder="프로젝트 제목" aria-label="프로젝트 제목">
   <button class="btn" id="queue-badge" hidden title="그림 대기열 — 누르면 🎨 이미지 탭으로" style="padding:4px 10px"></button>
@@ -127,21 +131,49 @@ table.places input{ width:100%; padding:4px 6px; }
   <span id="ai-badge" class="pill">AI 꺼짐</span>
 </header>
 <nav id="tabs">
-  <button data-tab="source" class="on">① 소스</button>
-  <button data-tab="script">② 대본</button>
-  <button data-tab="shots">🎨 이미지</button>
-  <button data-tab="video">③ 삽화 영상</button>
-  <button data-tab="story">④ 스토리 PPT</button>
-  <button data-tab="map">⑤ 지도</button>
-  <button data-tab="board">⑥ 판서 PPT</button>
-  <button data-tab="chalk">⑦ 손그림 → 판서</button>
-  <button data-tab="upload">⑧ 업로드 준비</button>
-  <button data-tab="lesson">⑨ 수업 자료</button>
+  <button data-tab="materials" class="on">✦ 자료 제작</button>
+  <button data-tab="shots">삽화·이미지</button>
+  <button data-tab="story">스토리 PPT</button>
+  <button data-tab="map">지도 PNG</button>
+  <button data-tab="board">판서 PPT</button>
+  <button data-tab="script">대본 편집</button>
+  <button data-tab="source">소스로 대본 쓰기</button>
+  <button data-tab="chalk">손그림 → 판서</button>
+  <button data-tab="video">영상 도구</button>
+  <button data-tab="upload">업로드 준비</button>
+  <button data-tab="lesson">수업 자료</button>
   <button data-tab="settings">설정</button>
 </nav>
 <main>
+<section class="tab on" id="tab-materials">
+  <div class="material-hero"><span class="pill">대본 → 제작 목록 → 자료별 받기</span><h2>한 편의 대본을, 필요한 자료로.</h2>
+  <p class="lead">삽화·지도 PNG, 스토리 PPT, 판서 자료를 준비하세요. 그림은 Codex·ChatGPT 구독으로 만들고, 지도와 인용 화면·PPT는 여기서 만듭니다.</p></div>
+  <div class="card" id="material-input">
+    <h3>1. 완성 대본 넣기</h3><p class="small">원고의 표현을 보존한 채 제작 구간을 나눕니다. 제목을 첫 줄에 넣어 주세요.</p>
+    <textarea id="material-script" aria-label="완성 대본" placeholder="직접 쓴 설명 원고나 완성된 내레이션을 붙여 넣으세요."></textarea>
+    <div class="row"><button class="btn" id="material-sample">명량대첩 원고 예시</button><label class="btn">대본 파일 넣기<input id="material-file" type="file" accept=".txt,.md,text/plain" hidden></label><button class="btn primary" id="material-propose">제작 목록 제안받기</button></div>
+  </div>
+  <div class="card" id="material-review" hidden>
+    <h3>2. 만들 자료 검토하기</h3><p class="small" id="material-method"></p>
+    <p class="small">항목별 종류·그림 수·제작 지시·판서를 고쳐 보세요. 지도는 등록된 지명의 위치 참고용이며, 전술도·영토·해류를 자동 추정하지 않습니다. 원고의 인용과 숫자는 출처 검토가 필요합니다.</p>
+    <div class="row"><button class="btn" id="material-plan-export">구독 AI로 기획 다듬기 · 요청서 받기</button><label class="btn">다듬은 목록 불러오기<input id="material-plan-import" type="file" accept=".json,application/json" hidden></label></div>
+    <p class="small">선택 사항: 요청서 ZIP을 Codex·ChatGPT에 전달하고, 돌려받은 목록 JSON을 불러오세요. 적용 뒤에도 선생님이 검토·확정합니다.</p>
+    <div id="material-groups"></div>
+    <div class="row material-confirm"><b id="material-summary"></b><button class="btn primary" id="material-confirm">이 목록으로 확정</button></div>
+  </div>
+  <div class="card" id="material-output" hidden>
+    <h3>3. 자료 만들고 각각 받기</h3><p id="material-progress"></p>
+    <div class="material-outputs">
+      <div><h4>삽화·이미지</h4><p class="small">주문서를 Codex·ChatGPT에 전달해 그림을 만든 뒤, 파일 이름 그대로 불러오세요.</p><button class="btn primary" id="material-order">그림 주문서 받기</button> <label class="btn">만든 그림 불러오기<input id="material-images" type="file" accept="image/*" multiple hidden></label><button class="btn" data-material-export="images">완료된 삽화 PNG 받기</button><button class="btn" data-go="shots">화풍·등장인물·그림 확인</button></div>
+      <div><h4>지도·인용·비교</h4><p class="small">지도와 글자 자료는 앱에서 PNG로 만듭니다. 그림 구독이나 API 키가 필요 없습니다.</p><button class="btn" data-material-export="maps">지도 PNG 받기</button><button class="btn" data-material-export="figures">인용·비교 PNG 받기</button></div>
+      <div><h4>스토리 PPT</h4><p class="small">자료 한 장면당 슬라이드 한 장, 발표자 노트에 해당 원고를 넣습니다.</p><button class="btn" id="material-story">스토리 PPT 받기</button></div>
+      <div><h4>판서 내용</h4><p class="small">검토한 핵심어·인과관계·정리 내용을 판서 PNG와 편집 가능한 PPT로 받습니다.</p><button class="btn" data-material-export="board">판서 PNG 받기</button><button class="btn" id="material-board">판서 PPT 받기</button></div>
+    </div>
+  </div>
+  <p id="material-status" class="status" role="status" aria-live="polite"></p>
+</section>
 
-<section class="tab on" id="tab-source">
+<section class="tab" id="tab-source">
   <h2>소스 넣기</h2>
   <p class="lead">교과서 본문, 사료 번역문, 논문 요약, 내 강의 메모 등을 붙여 넣으세요. 텍스트 파일(.txt, .md)은 글로 들어가고,
     <b>PDF와 사진</b>(교과서·사료 쪽을 찍은 사진)은 첨부로 들어가 AI 모드에서 Claude가 직접 읽습니다.</p>
@@ -537,6 +569,7 @@ table.places input{ width:100%; padding:4px 6px; }
 <script src="content/geo.js"></script>
 <script src="content/places.js"></script>
 <script src="content/sample.js"></script>
+<script src="content/material-sample.js"></script>
 <script src="assets/app.js"></script>
 <script src="assets/scriptgen.js"></script>
 <script src="assets/board.js"></script>
@@ -557,6 +590,8 @@ table.places input{ width:100%; padding:4px 6px; }
 <script src="assets/queue.js"></script>
 <script src="assets/shots-ui.js"></script>
 <script src="assets/scene-edit.js"></script>
+<script src="assets/materials.js"></script>
+<script src="assets/materials-ui.js"></script>
 <script src="assets/ui.js"></script>
 </body>
 </html>

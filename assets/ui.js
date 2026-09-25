@@ -2,7 +2,7 @@
 (function(){
   'use strict';
   var HS = window.HS, $ = HS.$, P = function(){ return HS.project; };
-  var current = 'source';
+  var current = 'materials';
 
   function status(id, msg, err){ var el = $(id); if(!el) return; el.textContent = msg || ''; el.classList.toggle('err', !!err); }
   function aiOn(){ return !!HS.CFG.key; }
@@ -22,7 +22,7 @@
   Array.prototype.forEach.call(document.querySelectorAll('[data-go]'), function(b){ b.addEventListener('click', function(){ show(b.dataset.go); }); });
 
   function render(tab){
-    ({ source: renderSource, script: renderScript, video: renderVideo, story: renderStory, map: renderMap, board: renderBoard, chalk: renderChalk, upload: HS.renderUpload, lesson: HS.renderLesson, shots: HS.renderShots, settings: renderSettings })[tab]();
+    ({ materials: HS.renderMaterials, source: renderSource, script: renderScript, video: renderVideo, story: renderStory, map: renderMap, board: renderBoard, chalk: renderChalk, upload: HS.renderUpload, lesson: HS.renderLesson, shots: HS.renderShots, settings: renderSettings })[tab]();
   }
   HS.onChange(function(what){ if(what === 'all') { $('proj-title').value = P().title || ''; render(current); drawProjects(); } });
 
@@ -845,7 +845,7 @@
   $('proj-select').addEventListener('change', function(){
     var v = this.value;
     stopPlay();
-    (v === '__new' ? HS.newProject() : HS.openProject(v)).then(function(){ drawProjects(); if(v === '__new') show('source'); });
+    (v === '__new' ? HS.newProject() : HS.openProject(v)).then(function(){ drawProjects(); if(v === '__new') show('materials'); });
   });
   $('proj-list').addEventListener('click', function(e){
     var b = e.target.closest('button[data-open]'); if(!b) return;
@@ -876,7 +876,7 @@
     }).catch(function(e){ status('proj-status', e.message, true); });
   });
   $('proj-new').addEventListener('click', function(){
-    HS.newProject().then(function(){ drawProjects(); show('source'); });
+    HS.newProject().then(function(){ drawProjects(); show('materials'); });
   });
 
   /* ── 시작 ───────────────────────────────────────── */
@@ -884,9 +884,9 @@
   HS.ready.then(function(){
     $('proj-title').value = P().title || '';
     drawProjects();
-    var startTab = 'source';
-    try{ startTab = localStorage.getItem('hs.tab') || 'source'; }catch(e){}
-    show(document.getElementById('tab-' + startTab) ? startTab : 'source');
+    var startTab = 'materials';
+    try{ startTab = localStorage.getItem('hs.tab') || 'materials'; }catch(e){}
+    show(document.getElementById('tab-' + startTab) ? startTab : 'materials');
     document.body.setAttribute('data-ready', '1');
   });
   // 웹 글꼴이 늦게 오면 캔버스를 다시 그립니다

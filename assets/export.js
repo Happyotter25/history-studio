@@ -15,7 +15,7 @@
     if(HS.isDataScene(scene)) HS.drawDataScene(ctx, w, h, scene, 1);
     else if(shotImg){ var q = Math.max(w / shotImg.width, h / shotImg.height); ctx.drawImage(shotImg, (w - shotImg.width * q) / 2, (h - shotImg.height * q) / 2, shotImg.width * q, shotImg.height * q); }
     else if(scene.shots && scene.shots.length && HS.readyShots(scene).length) HS.drawShots(ctx, w, h, scene, 0);
-    else if(scene.useMap && HS.project.map.places.length) HS.drawMap(ctx, w, h, HS.project.map, { style: HS.project.mapStyle || 'illust' });
+    else if(scene.useMap && HS.project.map.places.length) HS.drawMap(ctx, w, h, scene.materialPlaces && HS.materialMap ? HS.materialMap(scene) : HS.project.map, { style: HS.project.mapStyle || 'illust' });
     else if(layers) HS.drawLayers(ctx, w, h, layers, 'zoomIn', 0);
     else if(img){
       var s = Math.max(w / img.width, h / img.height);
@@ -53,6 +53,14 @@
       cover.addNotes(p.scenes[0].narration || '');
       // 장면
       p.scenes.forEach(function(s, i){
+        if(opt.allScenes){
+          var full = pptx.addSlide();
+          full.addImage({data:HS.sceneStill(s,1600,900).toDataURL('image/jpeg',0.9),x:0,y:0,w:W,h:H});
+          full.addShape(pptx.ShapeType.rect,{x:0,y:6.5,w:W,h:1,fill:{color:'000000',transparency:25},line:{type:'none'}});
+          var waiting = HS.needsPicture(s) && !(s.shots || []).some(function(sh){return sh.image && !sh.redo;});
+          full.addText((i+1)+'. '+s.heading+(waiting?' · 삽화 대기':''),{x:0.5,y:6.7,w:12.3,h:0.6,fontFace:sans,fontSize:26,color:'FFFFFF',fit:'shrink'});
+          full.addNotes(s.narration || ''); return;
+        }
         if(i === 0 && p.scenes.length > 1) return;
         var sl = pptx.addSlide();
         sl.background = { color: th.bg };

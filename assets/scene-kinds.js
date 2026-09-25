@@ -91,7 +91,12 @@
     // 번역
     var tfs = (orig ? 30 : 38) * u;
     ctx.font = Math.round(tfs) + 'px ' + SERIF;
-    var lines = HS.wrap(ctx, tr, trBox[2]), total = tr.length, part = upto(lines, Math.floor(total * span(k, orig ? 0.5 : 0.15, 0.88)));
+    var lines = HS.wrap(ctx, tr, trBox[2]);
+    // 긴 번역 인용도 출처 영역을 침범하지 않도록 글자 크기를 맞춥니다.
+    while(tfs > 16 * u && lines.length * tfs * 1.55 > py + ph - 80 * u - trBox[1]){
+      tfs *= 0.95; ctx.font = Math.round(tfs) + 'px ' + SERIF; lines = HS.wrap(ctx, tr, trBox[2]);
+    }
+    var total = tr.length, part = upto(lines, Math.floor(total * span(k, orig ? 0.5 : 0.15, 0.88)));
     part.forEach(function(l, i){ rich(ctx, l, trBox[0], trBox[1] + tfs + i * tfs * 1.55, keys, INK); });
     // 출처
     if(d.cite && k > 0.88){
