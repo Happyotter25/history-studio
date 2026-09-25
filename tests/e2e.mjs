@@ -1560,9 +1560,9 @@ await test('장면 스튜디오: 원문 경계·분할·합치기·검토 무효
     p.mode='compose';p.slides.forEach((s,i)=>{s.type=i?'board':'text';s.content=i?'*핵심 개념\n- 원인\n→ 결과':'한 장면의 핵심 설명';s.reviewed=HS.studioFingerprint(p,s);});HS.project.studio=p;
     const z=await JSZip.loadAsync(await HS.exportStudio('png',true)),ppt=await JSZip.loadAsync(await HS.exportStudio('ppt',true));
     const pngs=Object.keys(z.files).filter(n=>n.endsWith('.png')).length,slides=Object.keys(ppt.files).filter(n=>/^ppt\/slides\/slide\d+\.xml$/.test(n)).length;
-    const notes=await ppt.file('ppt/notesSlides/notesSlide1.xml').async('string');p.slides[0].content+=' 수정';let blocked='';try{await HS.exportStudio('png',true);}catch(e){blocked=e.message;}
-    return {same,merged,invalid,pngs,slides,n:p.slides.length,notes,blocked};
-  });assert.ok(r.same&&r.merged);assert.match(r.invalid,/빠진 원고/);assert.equal(r.pngs,r.n);assert.equal(r.slides,r.n);assert.match(r.notes,/첫 번째/);assert.match(r.blocked,/검토 완료/);await pg.context().close();
+    const notes=await ppt.file('ppt/notesSlides/notesSlide1.xml').async('string'),boardNotes=await ppt.file('ppt/notesSlides/notesSlide2.xml').async('string');p.slides[0].content+=' 수정';let blocked='';try{await HS.exportStudio('png',true);}catch(e){blocked=e.message;}
+    return {same,merged,invalid,pngs,slides,n:p.slides.length,notes,boardNotes,blocked};
+  });assert.ok(r.same&&r.merged);assert.match(r.invalid,/빠진 원고/);assert.equal(r.pngs,r.n);assert.equal(r.slides,r.n);assert.match(r.notes,/첫 번째/);assert.match(r.notes,/한 장면의 핵심 설명/);assert.match(r.notes,/슬라이드 제목/);assert.match(r.boardNotes,/핵심 개념/);assert.match(r.boardNotes,/두 번째/);assert.match(r.blocked,/검토 완료/);await pg.context().close();
 });
 await test('장면 스튜디오: 입력→구분 검토→한 장면씩 글·판서→검토 완료·저장·복원',async()=>{
   const pg=await open();await pg.click('#tabs button[data-tab=studio]');await pg.fill('#studio-script','첫 장면입니다.\n\n두 번째 장면입니다.');await pg.click('#studio-paragraph');await pg.waitForFunction(()=>HS.project.studio.mode==='review');
