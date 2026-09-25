@@ -33,31 +33,62 @@
     var p = P();
     $('src-text').value = p.source;
     $('opt-length').value = p.options.length; $('opt-audience').value = p.options.audience; $('opt-tone').value = p.options.tone;
+    $('src-files').innerHTML = (p.sourceFiles || []).map(function(f, i){
+      return '<span class="pill" data-i="' + i + '">' + (f.mediaType === 'application/pdf' ? 'PDF' : '사진') + ' · ' + HS.esc(f.name) + ' (' + Math.max(1, Math.round(f.size / 1024)) + 'KB) <a href="#" data-act="del" title="빼기">✕</a></span>';
+    }).join(' ');
   }
   $('src-text').addEventListener('input', function(){ P().source = this.value; HS.changed('source'); });
   ['opt-length', 'opt-audience', 'opt-tone'].forEach(function(id){
     $(id).addEventListener('change', function(){ P().options[{ 'opt-length': 'length', 'opt-audience': 'audience', 'opt-tone': 'tone' }[id]] = this.value; HS.changed('options'); });
   });
+  // 글 파일은 글칸에 붙이고, PDF·사진은 첨부로 둡니다 (사진은 긴 변 1600px 로 줄여서)
+  function addSourceFile(f){
+    var p = P();
+    if(/\.(txt|md)$/i.test(f.name) || f.type === 'text/plain'){
+      return HS.readFile(f, true).then(function(t){ p.source = p.source.trim() ? p.source + '\n\n' + t : t; });
+    }
+    if(f.type === 'application/pdf' || /\.pdf$/i.test(f.name)){
+      if(f.size > 30 * 1024 * 1024) throw new Error(f.name + ': PDF가 30MB를 넘습니다. 필요한 쪽만 나눠 넣으세요');
+      return HS.readFile(f).then(function(u){ p.sourceFiles.push({ name: f.name, mediaType: 'application/pdf', data: u.slice(u.indexOf(',') + 1), size: f.size }); });
+    }
+    if(/^image\//.test(f.type)){
+      return HS.readFile(f).then(function(u){ return HS.shrinkImage(u, 1600); }).then(function(u){
+        var data = u.slice(u.indexOf(',') + 1);
+        p.sourceFiles.push({ name: f.name, mediaType: 'image/jpeg', data: data, size: Math.round(data.length * 0.75) });
+      });
+    }
+    throw new Error(f.name + ': 읽을 수 없는 파일입니다');
+  }
   $('src-file').addEventListener('change', function(){
-    var f = this.files[0]; if(!f) return;
-    HS.readFile(f, true).then(function(t){ P().source = t; $('src-text').value = t; HS.changed('source'); });
+    var files = Array.prototype.slice.call(this.files), input = this;
+    P().sourceFiles = P().sourceFiles || [];
+    files.reduce(function(chain, f){ return chain.then(function(){ return addSourceFile(f); }); }, Promise.resolve())
+      .then(function(){ status('src-status', files.length + '개 파일을 넣었습니다'); }, function(e){ status('src-status', e.message, true); })
+      .then(function(){ input.value = ''; HS.changed('source'); renderSource(); });
+  });
+  $('src-files').addEventListener('click', function(e){
+    var a = e.target.closest('[data-act=del]'); if(!a) return;
+    e.preventDefault();
+    P().sourceFiles.splice(+a.closest('[data-i]').dataset.i, 1); HS.changed('source'); renderSource();
   });
   $('src-sample').addEventListener('click', function(){ P().source = window.SAMPLE_SOURCE; $('src-text').value = P().source; HS.changed('source'); });
   $('btn-generate').addEventListener('click', function(){
     var btn = this;
-    if(!P().source.trim()){ status('gen-status', '소스를 먼저 넣으세요', true); return; }
-    if(P().scenes.length && !confirm('지금 대본·판서·지도를 새로 만든 것으로 바꿀까요?')) return;
-    if(!aiOn()){
-      try{ HS.generateSimple(); status('gen-status', '간이 방식으로 장면 ' + P().scenes.length + '개를 만들었습니다.'); show('script'); }
-      catch(e){ status('gen-status', e.message, true); }
-      return;
-    }
-    btn.disabled = true; status('gen-status', 'Claude에게 보내는 중…');
-    HS.generateAI(function(m){ status('gen-status', m); }).then(function(){
-      status('gen-status', '장면 ' + P().scenes.length + '개, 판서 ' + P().board.length + '장, 지명 ' + P().map.places.length + '곳을 만들었습니다. (약 ' + (HS.cost.last || 0) + '원)');
-      show('script');
-    }).catch(function(e){ console.error(e); status('gen-status', HS.whyFail(e), true); })
-      .then(function(){ btn.disabled = false; });
+    if(!HS.hasSource()){ status('gen-status', '소스를 먼저 넣으세요', true); return; }
+    if(P().scenes.length && !confirm('지금 대본·판서·지도를 새로 만든 것으로 바꿀까요? (지금 상태는 되돌리기 기록에 남습니다)')) return;
+    btn.disabled = true;
+    HS.snapshot('대본 새로 만들기 전').then(function(){
+      if(!aiOn()){
+        try{ HS.generateSimple(); status('gen-status', '간이 방식으로 장면 ' + P().scenes.length + '개를 만들었습니다.'); show('script'); }
+        catch(e){ status('gen-status', e.message, true); }
+        return;
+      }
+      status('gen-status', 'Claude에게 보내는 중…');
+      return HS.generateAI(function(m){ status('gen-status', m); }).then(function(){
+        status('gen-status', '장면 ' + P().scenes.length + '개, 판서 ' + P().board.length + '장, 지명 ' + P().map.places.length + '곳을 만들었습니다. (약 ' + (HS.cost.last || 0) + '원)');
+        show('script');
+      }).catch(function(e){ console.error(e); status('gen-status', HS.whyFail(e), true); });
+    }).then(function(){ btn.disabled = false; });
   });
 
   /* ── ② 대본 ─────────────────────────────────────── */
@@ -124,7 +155,7 @@
       var kind = box.querySelector('[data-rw]').value, ins = HS.REWRITES[kind];
       if(kind === 'custom'){ ins = prompt('이 장면을 어떻게 고칠까요?', '예: 조선 수군의 전술을 한 문장 더 설명해 주세요'); if(!ins) return; }
       b.disabled = true; st.textContent = '고치는 중…';
-      HS.rewriteScene(i, ins).then(function(){ renderScript(); HS.toast('#' + (i + 1) + ' 장면을 고쳤습니다'); })
+      HS.snapshot('#' + (i + 1) + ' 장면 AI로 고치기 전').then(function(){ return HS.rewriteScene(i, ins); }).then(function(){ renderScript(); HS.toast('#' + (i + 1) + ' 장면을 고쳤습니다'); })
         .catch(function(err){ st.textContent = HS.whyFail(err); b.disabled = false; });
       return;
     }
@@ -161,18 +192,24 @@
         '<div class="row small" style="margin-top:6px"><button class="btn" data-act="aidraw">' + (s.svg ? 'AI로 다시 그리기' : 'AI로 그리기') + '</button><label class="btn">그림 파일<input type="file" accept="image/*" data-act="img" hidden></label>' +
         '<label class="inline"><input type="checkbox" data-act="usemap"' + (s.useMap ? ' checked' : '') + '> 지도 장면</label><span class="status" data-st></span></div>' +
         '<div class="row small" style="margin-top:6px">목소리 ' + voice + '</div>' +
-        '<div class="row small" style="margin-top:6px">카메라 <select data-k="motion">' + opts(MOTIONS, s.motion) + '</select> 분위기 <select data-k="mood">' + opts(MOODS, s.mood) + '</select> <span>약 ' + Math.round(HS.sceneDuration(s)) + '초</span></div></div>';
+        '<div class="row small" style="margin-top:6px">카메라 <select data-k="motion">' + opts(MOTIONS, s.motion) + '</select> 분위기 <select data-k="mood">' + opts(MOODS, s.mood) + '</select> ' +
+        (s.audio ? '<span>목소리에 맞춰 약 ' + Math.round(HS.sceneDuration(s)) + '초</span>'
+          : '<label class="inline">길이 <input type="number" data-k="dur" min="1.5" max="120" step="0.5" style="width:70px" value="' + (+s.dur > 0 ? s.dur : '') + '" placeholder="' + Math.round(HS.sceneDuration(Object.assign({}, s, { dur: 0 })) - 0.8) + '">초</label>') + '</div></div>';
     }).join('') : '<p class="small">대본이 없습니다.</p>';
+    renderBgm();
+    $('vid-seek').max = Math.max(0.1, HS.totalDuration()); $('vid-seek').value = playT;
     status('vid-status', p.scenes.length ? '전체 약 ' + Math.round(HS.totalDuration()) + '초' : '');
     HS.preloadImages().then(function(){ drawVideoAt(Math.min(playT, HS.totalDuration())); });
   }
   function aiDraw(i, st){
     st = st || function(){};
-    return HS.drawSceneAI(i, st).then(function(){ st(''); renderVideo(); });
+    var before = P().scenes[i].svg ? HS.snapshot('#' + (i + 1) + ' 그림 다시 그리기 전') : Promise.resolve();
+    return before.then(function(){ return HS.drawSceneAI(i, st); }).then(function(){ st(''); renderVideo(); });
   }
   $('vid-scenes').addEventListener('change', function(e){
     var box = e.target.closest('.scene'); if(!box) return;
     var s = P().scenes[+box.dataset.i], act = e.target.dataset.act;
+    if(e.target.dataset.k === 'dur'){ var v = parseFloat(e.target.value); s.dur = v > 0 ? v : null; HS.changed('scene'); renderVideo(); return; }
     if(e.target.dataset.k){ s[e.target.dataset.k] = e.target.value; HS.changed('scene'); renderVideo(); return; }
     if(act === 'usemap'){ s.useMap = e.target.checked; HS.changed('scene'); renderVideo(); return; }
     if(act === 'img' && e.target.files[0]){
@@ -230,6 +267,31 @@
     })();
   });
   $('vid-subs').addEventListener('change', function(){ drawVideoAt(playT); });
+  $('vid-seek').addEventListener('input', function(){
+    stopPlay(); playT = +this.value;
+    drawVideoAt(playT);
+    status('vid-status', Math.floor(playT) + ' / ' + Math.round(HS.totalDuration()) + '초');
+  });
+  function renderBgm(){
+    var b = P().bgm;
+    $('bgm-name').textContent = b && b.data ? b.name + ' (' + Math.round(b.dur || 0) + '초, 반복)' : '없음';
+    $('bgm-vol').value = b && b.volume != null ? b.volume : 0.25;
+    $('bgm-duck').checked = !b || b.duck !== false;
+    $('bgm-remove').disabled = !(b && b.data);
+  }
+  $('bgm-file').addEventListener('change', function(){
+    var f = this.files[0], input = this; if(!f) return;
+    HS.readFile(f).then(function(u){
+      var b = { name: f.name, data: u, volume: +$('bgm-vol').value, duck: $('bgm-duck').checked };
+      return HS.sceneAudio({ audio: u }).then(function(buf){
+        if(!buf) throw new Error('음악 파일을 읽지 못했습니다');
+        b.dur = buf.duration; P().bgm = b; HS.changed('bgm'); renderBgm();
+      });
+    }).catch(function(e){ HS.toast(e.message); }).then(function(){ input.value = ''; });
+  });
+  $('bgm-vol').addEventListener('change', function(){ if(P().bgm){ P().bgm.volume = +this.value; HS.changed('bgm'); } });
+  $('bgm-duck').addEventListener('change', function(){ if(P().bgm){ P().bgm.duck = this.checked; HS.changed('bgm'); } });
+  $('bgm-remove').addEventListener('click', function(){ P().bgm = null; HS.changed('bgm'); renderBgm(); });
   $('vid-play').addEventListener('click', function(){
     if(playing){ stopPlay(); return; }
     var total = HS.totalDuration(); if(!total) return;
@@ -242,7 +304,7 @@
       (function loop(now){
         playT = (now - t0) / 1000;
         if(playT >= total){ playT = total; drawVideoAt(total); stopPlay(); return; }
-        drawVideoAt(playT);
+        drawVideoAt(playT); $('vid-seek').value = playT;
         status('vid-status', Math.floor(playT) + ' / ' + Math.round(total) + '초');
         playing = requestAnimationFrame(loop);
       })(performance.now());
@@ -251,13 +313,13 @@
   $('vid-record').addEventListener('click', function(){
     var btn = this, total = HS.totalDuration(); if(!total) return;
     stopPlay(); btn.disabled = true;
-    var voiced = P().scenes.some(function(s){ return s.audio; });
+    var voiced = HS.hasAudio();
     HS.preloadImages().then(function(){
-      return Promise.all(P().scenes.map(HS.sceneAudio)); // 소리를 미리 풀어 두어야 그림과 어긋나지 않습니다
+      return Promise.all(P().scenes.map(HS.sceneAudio).concat([HS.bgmBuffer()])); // 소리를 미리 풀어 두어야 그림과 어긋나지 않습니다
     }).then(function(){
       return HS.recordCanvas(vc, total, drawVideoAt, function(t){ status('vid-status', '녹화 중… ' + Math.floor(t) + ' / ' + Math.round(total) + '초 (탭을 바꾸지 마세요)'); },
         voiced ? function(dest){ return HS.playNarration(0, dest); } : null);
-    }).then(function(blob){ HS.download(HS.fileName(' 삽화영상' + HS.videoExt(blob)), blob); status('vid-status', '녹화를 마쳤습니다 (' + Math.round(blob.size / 1024) + 'KB' + (voiced ? ', 목소리 포함' : '') + ')'); })
+    }).then(function(blob){ HS.download(HS.fileName(' 삽화영상' + HS.videoExt(blob)), blob); status('vid-status', '녹화를 마쳤습니다 (' + Math.round(blob.size / 1024) + 'KB' + (voiced ? ', 소리 포함' : '') + ')'); })
       .catch(function(e){ status('vid-status', e.message, true); })
       .then(function(){ btn.disabled = false; });
   });
@@ -478,7 +540,22 @@
   });
 
   /* ── 설정 ───────────────────────────────────────── */
+  function renderUndo(){
+    return HS.snapshots().then(function(h){
+      $('undo-list').innerHTML = h.length ? h.map(function(x, i){
+        var d = new Date(x.at);
+        return '<div class="row" style="margin:4px 0"><span style="flex:1">' + (d.getMonth() + 1) + '/' + d.getDate() + ' ' + d.toTimeString().slice(0, 5) + ' · ' + HS.esc(x.label) +
+          ' <span class="small">(' + HS.esc(x.title || '제목 없음') + ', 장면 ' + x.scenes + '개)</span></span><button class="btn" data-undo="' + i + '">이 상태로 되돌리기</button></div>';
+      }).join('') : '<p class="small">아직 기록이 없습니다.</p>';
+    });
+  }
+  $('undo-list').addEventListener('click', function(e){
+    var b = e.target.closest('button[data-undo]'); if(!b) return;
+    HS.restoreSnapshot(+b.dataset.undo).then(function(x){ HS.toast('"' + x.label + '" 때로 되돌렸습니다'); renderUndo(); }, function(err){ HS.toast(err.message); });
+  });
+  $('btn-undo').addEventListener('click', function(){ show('settings'); $('undo-list').scrollIntoView({ block: 'center' }); });
   function renderSettings(){
+    renderUndo();
     $('cfg-key').value = HS.CFG.key; $('cfg-model').value = HS.CFG.model; $('cfg-format').value = HS.load('hs.format', 'mp4');
     $('cfg-cost').textContent = HS.cost.calls ? '지금까지 ' + HS.cost.calls + '번, 약 ' + Math.round(HS.cost.krw).toLocaleString() + '원 (어림).' : '';
   }
@@ -497,12 +574,12 @@
     HS.readFile(f, true).then(function(t){
       var p = JSON.parse(t);
       if(!p || !Array.isArray(p.scenes)) throw new Error('사관 스튜디오 백업 파일이 아닙니다');
-      HS.setProject(p); status('proj-status', '불러왔습니다: ' + (p.title || '제목 없음'));
+      return HS.snapshot('백업 불러오기 전').then(function(){ HS.setProject(p); status('proj-status', '불러왔습니다: ' + (p.title || '제목 없음')); });
     }).catch(function(e){ status('proj-status', e.message, true); });
   });
   $('proj-new').addEventListener('click', function(){
-    if(!confirm('지금 프로젝트를 비우고 새로 시작할까요? (백업을 먼저 받아 두세요)')) return;
-    HS.setProject(HS.blankProject()); show('source');
+    if(!confirm('지금 프로젝트를 비우고 새로 시작할까요? (지금 상태는 되돌리기 기록에 남습니다)')) return;
+    HS.snapshot('새 프로젝트 전').then(function(){ HS.setProject(HS.blankProject()); show('source'); });
   });
 
   /* ── 시작 ───────────────────────────────────────── */

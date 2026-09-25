@@ -36,19 +36,59 @@
 
   // 타임라인에 맞춰 목소리를 겁니다. from: 영상 안의 시작 시각(초), dest: 녹화용 출력(없으면 스피커)
   // 돌려주는 함수를 부르면 멈춥니다
+  // 배경음악도 같은 방식으로 풀어 둡니다
+  HS.bgmBuffer = function(){ var b = HS.project.bgm; return b && b.data ? HS.sceneAudio({ audio: b.data }) : Promise.resolve(null); };
+  HS.hasAudio = function(){ return !!(HS.project.bgm && HS.project.bgm.data) || HS.project.scenes.some(function(s){ return s.audio; }); };
+
+  // 목소리 구간 [시작, 끝] (영상 기준 초) — 배경음악을 줄일 때 씁니다
+  HS.voiceSpans = function(){
+    var scenes = HS.project.scenes;
+    return HS.timeline().filter(function(seg){ return scenes[seg.i].audio && scenes[seg.i].audioDur; }).map(function(seg){
+      var a = seg.start + HS.VOICE_LEAD; return [a, a + scenes[seg.i].audioDur];
+    });
+  };
+
+  // 배경음악 크기 (0~1): 처음 1초 커지고, 말하는 동안 35%로 줄고(앞 0.3초·뒤 0.4초 걸쳐), 끝 2초 동안 사라집니다
+  HS.bgmGainAt = function(t, spans, total){
+    var b = HS.project.bgm || {}, vol = b.volume == null ? 0.25 : +b.volume, k = Math.min(1, Math.max(0, t));
+    k = Math.min(k, Math.max(0, Math.min(1, (total - t) / 2)));
+    if(b.duck !== false) (spans || []).forEach(function(sp){
+      var d = 1;
+      if(t >= sp[0] && t <= sp[1]) d = 0.35;
+      else if(t < sp[0] && t > sp[0] - 0.3) d = 1 - 0.65 * (t - (sp[0] - 0.3)) / 0.3;
+      else if(t > sp[1] && t < sp[1] + 0.4) d = 0.35 + 0.65 * (t - sp[1]) / 0.4;
+      k = Math.min(k, d);
+    });
+    return vol * k;
+  };
+
   HS.playNarration = function(from, dest){
     var c = HS.audioCtx(); if(!c) return Promise.resolve(function(){});
-    var tl = HS.timeline(), scenes = HS.project.scenes, nodes = [], t0 = c.currentTime + 0.05;
-    return Promise.all(tl.map(function(seg){ return HS.sceneAudio(scenes[seg.i]); })).then(function(bufs){
+    var tl = HS.timeline(), scenes = HS.project.scenes, nodes = [], t0 = c.currentTime + 0.05, out = dest || c.destination;
+    return Promise.all(tl.map(function(seg){ return HS.sceneAudio(scenes[seg.i]); }).concat([HS.bgmBuffer()])).then(function(bufs){
+      var bgmBuf = bufs.pop();
       tl.forEach(function(seg, k){
         var buf = bufs[k]; if(!buf) return;
         var at = seg.start + HS.VOICE_LEAD - from; // 장면이 밝아진 뒤 말을 시작합니다
         if(at + buf.duration <= 0) return;
         var src = c.createBufferSource(); src.buffer = buf;
-        src.connect(dest || c.destination);
+        src.connect(out);
         if(at >= 0) src.start(t0 + at); else src.start(t0, -at);
         nodes.push(src);
       });
+      if(bgmBuf){
+        var b = HS.project.bgm, vol = b.volume == null ? 0.25 : +b.volume, total = HS.totalDuration();
+        var g = c.createGain(), src2 = c.createBufferSource();
+        src2.buffer = bgmBuf; src2.loop = true;
+        src2.connect(g); g.connect(out);
+        // 소리 크기 곡선(HS.bgmGainAt)을 0.1초마다 따라가게 걸어 둡니다
+        var spans = HS.voiceSpans(), G = g.gain;
+        G.setValueAtTime(HS.bgmGainAt(from, spans, total), t0);
+        for(var t = Math.floor(from * 10) / 10 + 0.1; t <= total + 0.001; t += 0.1) G.linearRampToValueAtTime(HS.bgmGainAt(t, spans, total), t0 + (t - from));
+        src2.start(t0, (from % bgmBuf.duration));
+        src2.stop(t0 + (total - from) + 0.05);
+        nodes.push(src2);
+      }
       return function(){ nodes.forEach(function(n){ try{ n.stop(); }catch(e){} }); };
     });
   };

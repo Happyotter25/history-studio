@@ -235,7 +235,7 @@ await test('AI 모드: Claude에게 구조화된 대본을 받아 채운다', as
   assert.equal(p.map.places.length, 2);
   assert.equal(body.model, 'claude-opus-5');
   assert.equal(body.output_config.format.type, 'json_schema');
-  assert.ok(body.messages[0].content.includes('명량 해전에 관한 소스'));
+  assert.ok(JSON.stringify(body.messages[0].content).includes('명량 해전에 관한 소스'));
   assert.deepEqual(pg.errors, []);
   await pg.context().close();
 });
@@ -274,7 +274,7 @@ await test('장면 하나를 AI로 고친다', async () => {
   await ai.click('#scene-list .scene[data-i="0"] button[data-act=rewrite]');
   await ai.waitForFunction(() => HS.project.scenes[0].heading === '짧아진 장면');
   const last = aiBodies[aiBodies.length - 1];
-  assert.ok(last.messages[0].content.includes('절반 길이'));
+  assert.ok(JSON.stringify(last.messages[0].content).includes('절반 길이'));
   assert.equal(await ai.evaluate(() => HS.project.scenes[1].heading), '울돌목', '다른 장면이 바뀜');
 });
 
@@ -451,6 +451,101 @@ await test('MP4를 고르면 MP4로 녹화된다 (브라우저가 지원할 때)
   });
   if (r.ok) { assert.equal(r.type, 'video/mp4'); assert.ok(r.ftyp); assert.equal(r.ext, '.mp4'); }
   assert.equal(r.type2, 'video/webm');
+});
+
+await test('PDF·사진 소스를 첨부하면 Claude에게 문서·그림 블록으로 보낸다', async () => {
+  await ai.click('#tabs button[data-tab=source]');
+  const pdf = Buffer.from('%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF\n');
+  const jpg = await ai.evaluate(() => { const c = document.createElement('canvas'); c.width = 3000; c.height = 2000; c.getContext('2d').fillRect(0, 0, 10, 10); return c.toDataURL('image/png').split(',')[1]; });
+  await ai.setInputFiles('#src-file', [
+    { name: '교과서.pdf', mimeType: 'application/pdf', buffer: pdf },
+    { name: '사료.png', mimeType: 'image/png', buffer: Buffer.from(jpg, 'base64') },
+    { name: '메모.txt', mimeType: 'text/plain', buffer: Buffer.from('덧붙인 메모') }]);
+  await ai.waitForFunction(() => HS.project.sourceFiles.length === 2);
+  assert.equal(await ai.locator('#src-files .pill').count(), 2);
+  assert.ok((await ai.inputValue('#src-text')).endsWith('덧붙인 메모'));
+  const n = aiBodies.length;
+  await ai.click('#btn-generate'); // 바꿀지 묻는 창은 위의 dialog 처리기가 받아 줍니다
+  await ai.waitForSelector('#tab-script.on');
+  assert.ok(aiBodies.length > n, 'Claude 요청이 없음');
+  const content = aiBodies[n].messages[0].content;
+  assert.equal(content[0].type, 'document');
+  assert.equal(content[0].source.media_type, 'application/pdf');
+  assert.equal(Buffer.from(content[0].source.data, 'base64').toString().slice(0, 8), '%PDF-1.4');
+  assert.equal(content[1].type, 'image');
+  assert.deepEqual(content[1].cache_control, { type: 'ephemeral' });
+  assert.equal(content[2].type, 'text');
+  assert.ok(content[2].text.includes('첨부한 파일'));
+  const small = await ai.evaluate(() => new Promise(ok => { const im = new Image(); im.onload = () => ok(Math.max(im.width, im.height)); im.src = 'data:image/jpeg;base64,' + HS.project.sourceFiles[1].data; }));
+  assert.equal(small, 1600, '사진을 줄이지 않음');
+});
+
+await test('되돌리기: 대본을 새로 만들기 전 상태로 돌아간다', async () => {
+  // 바로 앞 시험에서 새로 만들기 전에 기록이 남았어야 합니다 (그때는 그림이 있었음)
+  const before = await ai.evaluate(() => HS.project.scenes[0].svg);
+  assert.equal(before, undefined, '새 대본에는 그림이 없어야 함');
+  await ai.click('#btn-undo');
+  await ai.waitForSelector('#undo-list button[data-undo]');
+  const labels = await ai.locator('#undo-list .row').allTextContents();
+  assert.ok(labels[0].includes('대본 새로 만들기 전'), labels[0]);
+  await ai.click('#undo-list button[data-undo="0"]');
+  await ai.waitForFunction(() => !!HS.project.scenes[0].svg);
+  const r = await ai.evaluate(async () => ({ audio: !!HS.project.scenes[2].audio, top: (await HS.snapshots())[0].label }));
+  assert.ok(r.audio, '목소리가 돌아오지 않음');
+  assert.equal(r.top, '되돌리기 전');
+});
+
+await test('영상: 위치 막대로 옮겨 보고, 장면 길이를 직접 정한다', async () => {
+  await ai.click('#tabs button[data-tab=video]');
+  const total = await ai.evaluate(() => HS.totalDuration());
+  assert.equal(+(await ai.getAttribute('#vid-seek', 'max')), total);
+  const f0 = await ai.evaluate(() => document.getElementById('video-canvas').toDataURL());
+  await ai.locator('#vid-seek').fill(String(Math.round(total / 2)));
+  const f1 = await ai.evaluate(() => document.getElementById('video-canvas').toDataURL());
+  assert.notEqual(f0, f1, '화면이 바뀌지 않음');
+  await ai.fill('#vid-scenes .scene[data-i="1"] input[data-k=dur]', '12');
+  await ai.locator('#vid-scenes .scene[data-i="1"] input[data-k=dur]').dispatchEvent('change');
+  assert.equal(await ai.evaluate(() => HS.sceneDuration(HS.project.scenes[1])), 12.8);
+  await ai.fill('#vid-scenes .scene[data-i="1"] input[data-k=dur]', '');
+  await ai.locator('#vid-scenes .scene[data-i="1"] input[data-k=dur]').dispatchEvent('change');
+  assert.equal(await ai.evaluate(() => HS.project.scenes[1].dur), null);
+});
+
+await test('배경음악: 넣으면 녹화에 소리가 들어가고, 말할 때 줄어든다', async () => {
+  // 3초짜리 사인파
+  const wav = (() => {
+    const rate = 8000, n = rate * 3, buf = Buffer.alloc(44 + n * 2);
+    buf.write('RIFF', 0); buf.writeUInt32LE(36 + n * 2, 4); buf.write('WAVE', 8); buf.write('fmt ', 12); buf.writeUInt32LE(16, 16); buf.writeUInt16LE(1, 20); buf.writeUInt16LE(1, 22);
+    buf.writeUInt32LE(rate, 24); buf.writeUInt32LE(rate * 2, 28); buf.writeUInt16LE(2, 32); buf.writeUInt16LE(16, 34); buf.write('data', 36); buf.writeUInt32LE(n * 2, 40);
+    for (let i = 0; i < n; i++) buf.writeInt16LE(Math.round(Math.sin(i / rate * 2 * Math.PI * 220) * 6000), 44 + i * 2);
+    return buf;
+  })();
+  await ai.setInputFiles('#bgm-file', { name: 'bgm.wav', mimeType: 'audio/wav', buffer: wav });
+  await ai.waitForFunction(() => HS.project.bgm && HS.project.bgm.dur > 2.9);
+  assert.match(await ai.textContent('#bgm-name'), /bgm\.wav \(3초, 반복\)/);
+  const r = await ai.evaluate(async () => {
+    // 목소리를 모두 빼고 배경음악만으로도 소리 트랙이 생기는지
+    const saved = HS.project.scenes.map(s => s.audio);
+    HS.project.scenes.forEach(s => { s.audio = null; });
+    const has = HS.hasAudio();
+    const c = document.getElementById('video-canvas'), ctx = c.getContext('2d');
+    const blob = await HS.recordCanvas(c, 1.5, t => HS.drawVideoFrame(ctx, 1280, 720, t, {}), null, dest => HS.playNarration(0, dest));
+    const text = new TextDecoder('latin1').decode(new Uint8Array(await blob.arrayBuffer()));
+    HS.project.scenes.forEach((s, i) => { s.audio = saved[i]; });
+    const sp = HS.voiceSpans(), total = HS.totalDuration(), g = t => HS.bgmGainAt(t, sp, total);
+    const mid = (sp[0][0] + sp[0][1]) / 2, quiet = sp[0][0] - 1; // 목소리 1초 전 (이 장면은 마지막이라 뒤쪽은 끝 페이드에 걸림)
+    return { has, audio: /A_OPUS|Opus|mp4a/.test(text), spans: sp.length,
+      gains: { start: g(0), inVoice: g(mid), after: g(quiet), end: g(total), nearEnd: g(total - 1) } };
+  });
+  assert.ok(r.has && r.audio, JSON.stringify(r));
+  assert.equal(r.spans, 1);
+  assert.equal(r.gains.start, 0);
+  assert.ok(Math.abs(r.gains.inVoice - 0.25 * 0.35) < 1e-9, '말할 때 ' + r.gains.inVoice);
+  assert.ok(Math.abs(r.gains.after - 0.25) < 1e-9, '말하기 전 ' + r.gains.after);
+  assert.equal(r.gains.end, 0);
+  assert.ok(Math.abs(r.gains.nearEnd - 0.125) < 1e-9);
+  await ai.click('#bgm-remove');
+  assert.equal(await ai.evaluate(() => HS.project.bgm), null);
 });
 
 await test('그림·목소리가 든 프로젝트가 IndexedDB에 저장되어 다시 열어도 남는다', async () => {

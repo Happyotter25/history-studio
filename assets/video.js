@@ -29,6 +29,7 @@
   // 목소리가 있으면 목소리 길이에, 없으면 글자 수에 맞춥니다
   HS.sceneDuration = function(s){
     if(s.audio && s.audioDur) return Math.max(3, s.audioDur + HS.VOICE_LEAD + 0.5) + FADE;
+    if(+s.dur > 0) return Math.max(1.5, +s.dur) + FADE; // 직접 정한 길이
     return Math.max(4, Math.min(40, (s.narration || '').replace(/\s/g, '').length / CPS)) + FADE;
   };
   HS.timeline = function(){

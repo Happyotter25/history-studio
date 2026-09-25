@@ -19,13 +19,15 @@
       version: 1,
       title: '',
       source: '',
+      sourceFiles: [], // 첨부 소스 {name, mediaType, data(base64), size}
       options: { length: 'mid', audience: '중고등학생', tone: '친근한 설명체' },
       scenes: [],   // {heading, narration, visual, prompt, mood, motion, image, svg, audio, audioDur}
       board: [],    // {title, text, drawing, dw, dh}
       map: { title: '', view: null, places: [], routes: [], regions: [] }, // places {name, lon, lat, kind}; routes {from, to, label}; regions {name, color, points}
       checks: null, // 사실 확인 결과
       upload: null, // {titles, description, tags, thumbTexts, pinned}
-      thumb: null   // {scene, main, sub, color, layout}
+      thumb: null,  // {scene, main, sub, color, layout}
+      bgm: null     // 배경음악 {name, data(dataURL), dur, volume, duck}
     };
   };
   HS.project = HS.blankProject();
@@ -89,6 +91,27 @@
       }
     });
   };
+  /* 되돌리기 — AI 가 덮어쓰기 전 등 큰 변화 앞에서 지금 상태를 사진 찍어 둡니다 (최근 10개, IndexedDB) */
+  var SNAP_MAX = 10;
+  HS.snapshots = function(){
+    return idbGet('history').catch(function(){ return null; }).then(function(h){ return h || []; });
+  };
+  HS.snapshot = function(label){
+    var p = HS.project;
+    if(!p.scenes.length) return Promise.resolve(); // 대본이 없으면 되돌릴 것도 없습니다
+    var snap = { at: new Date().toISOString(), label: label, title: p.title, scenes: p.scenes.length, project: JSON.parse(JSON.stringify(p)) };
+    return HS.snapshots().then(function(h){
+      h.unshift(snap);
+      return idbPut('history', h.slice(0, SNAP_MAX));
+    }).catch(function(){});
+  };
+  HS.restoreSnapshot = function(i){
+    return HS.snapshots().then(function(h){
+      var s = h[i]; if(!s) throw new Error('기록이 없습니다');
+      return HS.snapshot('되돌리기 전').then(function(){ HS.setProject(s.project); return s; });
+    });
+  };
+
   HS.setProject = function(p){
     HS.project = fill(p);
     HS.changed('all');

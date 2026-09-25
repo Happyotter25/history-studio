@@ -78,9 +78,26 @@
     ].join('\n');
   }
 
+  /* 소스 묶음: 첨부한 PDF·사진은 문서·그림 블록으로, 붙여 넣은 글은 <source> 로.
+   * 첨부는 여러 요청에 똑같이 앞에 두고 캐시 표시를 붙여, 장면 고치기·사실 확인을 되풀이할 때 값이 덜 들게 합니다. */
+  function userContent(text){
+    var p = HS.project, blocks = [];
+    (p.sourceFiles || []).forEach(function(f){
+      if(f.mediaType === 'application/pdf') blocks.push({ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: f.data }, title: f.name });
+      else blocks.push({ type: 'image', source: { type: 'base64', media_type: f.mediaType, data: f.data } });
+    });
+    if(blocks.length) blocks[blocks.length - 1].cache_control = { type: 'ephemeral' };
+    var src = p.source.trim() ? '<source>\n' + p.source + '\n</source>\n\n' : '';
+    if(blocks.length) src = '(첨부한 파일' + (src ? '과 아래 글' : '') + '이 소스입니다.)\n' + src;
+    blocks.push({ type: 'text', text: src + text });
+    return blocks;
+  }
+  HS.userContent = userContent;
+  HS.hasSource = function(){ var p = HS.project; return !!(p.source.trim() || (p.sourceFiles && p.sourceFiles.length)); };
+
   HS.generateAI = function(onProgress){
     var p = HS.project;
-    return HS.callClaude(systemPrompt(p.options), [{ role: 'user', content: '다음 소스로 영상 대본을 지어 주세요.\n\n<source>\n' + p.source + '\n</source>' }], SCHEMA, function(snap){
+    return HS.callClaude(systemPrompt(p.options), [{ role: 'user', content: userContent('이 소스로 영상 대본을 지어 주세요.') }], SCHEMA, function(snap){
       var n = (snap.match(/"narration"/g) || []).length;
       onProgress && onProgress(n ? '장면 ' + n + '개째 쓰는 중…' : '구상하는 중…');
     }, 'high').then(function(r){ applyResult(r.data); return r.data; });
@@ -136,7 +153,7 @@
 
   HS.generateSimple = function(){
     var p = HS.project, sents = sentences(p.source);
-    if(!sents.length) throw new Error('소스가 비어 있습니다');
+    if(!sents.length) throw new Error(p.sourceFiles && p.sourceFiles.length ? 'PDF·사진 소스는 AI 모드(설정에서 API 키)에서만 읽을 수 있습니다. 글로 붙여 넣으면 간이 모드로도 만들 수 있습니다' : '소스가 비어 있습니다');
     var first = p.source.trim().split('\n')[0].trim();
     var title = first.length <= 30 && !/[.。]$/.test(first) ? first : headingOf(sents[0]);
     if(title === sents[0]) sents.shift();
@@ -199,9 +216,9 @@
     var p = HS.project, s = p.scenes[i];
     var outline = p.scenes.map(function(x, k){ return (k === i ? '▶ ' : '  ') + (k + 1) + '. ' + x.heading; }).join('\n');
     var sys = systemPrompt(p.options) + '\n\n지금은 대본 전체가 아니라 장면 하나만 고친다. 앞뒤 장면과 이어지게 하고, 출력은 heading/narration/visual/prompt 만.';
-    var msg = '<source>\n' + p.source + '\n</source>\n\n대본 차례:\n' + outline + '\n\n고칠 장면 (' + (i + 1) + '번):\n' +
+    var msg = '대본 차례:\n' + outline + '\n\n고칠 장면 (' + (i + 1) + '번):\n' +
       JSON.stringify({ heading: s.heading, narration: s.narration, visual: s.visual, prompt: s.prompt }, null, 1) + '\n\n요청: ' + instruction;
-    return HS.callClaude(sys, [{ role: 'user', content: msg }], SCENE_SCHEMA, null, 'medium').then(function(r){
+    return HS.callClaude(sys, [{ role: 'user', content: userContent(msg) }], SCENE_SCHEMA, null, 'medium').then(function(r){
       var d = r.data;
       s.heading = d.heading; s.narration = d.narration; s.visual = d.visual; s.prompt = d.prompt;
       HS.changed('scene');
@@ -238,7 +255,7 @@
       '- summary: 전체 평가 두세 문장.'
     ].join('\n');
     var script = p.scenes.map(function(s, k){ return '[' + (k + 1) + '] ' + s.heading + '\n' + s.narration; }).join('\n\n');
-    return HS.callClaude(sys, [{ role: 'user', content: '<source>\n' + p.source + '\n</source>\n\n<script>\n' + script + '\n</script>' }], CHECK_SCHEMA, null, 'high').then(function(r){
+    return HS.callClaude(sys, [{ role: 'user', content: userContent('<script>\n' + script + '\n</script>') }], CHECK_SCHEMA, null, 'high').then(function(r){
       p.checks = { at: new Date().toISOString(), summary: r.data.summary, items: r.data.items };
       HS.changed('checks');
       return p.checks;

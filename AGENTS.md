@@ -20,7 +20,7 @@ This repo was started from the same author's 어전회의 (eojeon) project and f
 ## Test (run before every commit)
 ```
 npm install
-npm test          # node tests/e2e.mjs — 26 Playwright tests, Claude API is mocked (SSE, routed by system prompt)
+npm test          # node tests/e2e.mjs — 30 Playwright tests, Claude API is mocked (SSE, routed by system prompt)
 ```
 `CHROMIUM_PATH=/path/to/chromium npm test` uses a specific browser.
 Headless Chromium renames non-ASCII download names to `download`; tests read the name
@@ -30,12 +30,12 @@ the app chose by wrapping `HS.download`.
 | Path | Role |
 |---|---|
 | `index.html` | Layout, all CSS, tab markup; script order matters (see bottom of file) |
-| `assets/app.js` | `window.HS` namespace: project state + autosave to IndexedDB (`hs` db, `kv` store, key `project`; localStorage fallback), `HS.ready`, utils, `HS.callClaude` |
-| `assets/scriptgen.js` | Source → script. `HS.generateAI` (schema `HS.SCRIPT_SCHEMA`), offline `HS.generateSimple`, `HS.rewriteScene`, `HS.factCheck` |
+| `assets/app.js` | `window.HS` namespace: project state + autosave to IndexedDB (`hs` db, `kv` store, key `project`; localStorage fallback), `HS.ready`, undo snapshots (`HS.snapshot`/`HS.restoreSnapshot`, key `history`, last 10), utils, `HS.callClaude` |
+| `assets/scriptgen.js` | Source → script. `HS.generateAI` (schema `HS.SCRIPT_SCHEMA`), offline `HS.generateSimple`, `HS.rewriteScene`, `HS.factCheck`; `HS.userContent` puts attached PDFs/images first as document/image blocks with `cache_control` on the last one |
 | `assets/board.js` | Board line syntax (`HS.parseBoardLine`), chalkboard background, `HS.drawBoardSlide` (with `progress` for the writing animation), `HS.boardChars` |
 | `assets/scene-art.js` | Procedural mood backgrounds for scenes without an image (`HS.drawSceneArt`) |
 | `assets/ai-art.js` | Claude-drawn SVG illustrations in 3 layers (`far/mid/near`) for parallax; `HS.cleanSvg` sanitizes (no script/image/text/external refs) |
-| `assets/voice.js` | Per-scene narration audio (mic via MediaRecorder or file), `HS.playNarration` schedules it on the timeline (speakers or a MediaStream destination for recording) |
+| `assets/voice.js` | Per-scene narration audio (mic via MediaRecorder or file), `HS.playNarration` schedules voices + background music (gain curve `HS.bgmGainAt`: fade in/out, ducking under `HS.voiceSpans`) on the timeline (speakers or a MediaStream destination for recording) |
 | `assets/video.js` | Timeline (voice length drives scene length), Ken Burns / SVG parallax / map scenes + crossfade + subtitles (`HS.drawVideoFrame`), `HS.recordCanvas` (MediaRecorder → WebM, optional audio) |
 | `assets/map.js` | Equirectangular map on Natural Earth coastlines, regions (shaded polygons), places, animated route arrows (`HS.drawMap`, `HS.mapView`, `HS.mapUnproject`) |
 | `assets/chalk.js` | Adaptive-threshold ink extraction + chalk texture (`HS.convertToChalk`), drawing-reveal animation (`HS.drawChalkReveal`), photo stroke tracing (`HS.traceStrokes`: Zhang-Suen thinning + nearest-next ordering) |
@@ -52,9 +52,10 @@ the app chose by wrapping `HS.download`.
 
 ## Data model (`HS.project`, saved to IndexedDB, exported as backup JSON)
 ```
-{ version, title, source, options:{length,audience,tone}, mapStyle,
+{ version, title, source, sourceFiles:[{name, mediaType, data(base64), size}], options:{length,audience,tone}, mapStyle,
+  bgm:{name, data(dataURL), dur, volume, duck}|null,
   scenes:[{heading, narration, visual, prompt, mood, motion, useMap,
-           image(dataURL|null), svg(string|null), audio(dataURL|null), audioDur}],
+           image(dataURL|null), svg(string|null), audio(dataURL|null), audioDur, dur(seconds override|null)}],
   board:[{title, text, drawing(dataURL|null), dw, dh}],
   map:{title, view([lon0,lat0,lon1,lat1]|null=auto), places:[{name,lon,lat,kind}], routes:[{from,to,label}],
        regions:[{name,color,points:[[lon,lat],...]}]},

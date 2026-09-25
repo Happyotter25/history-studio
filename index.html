@@ -81,6 +81,7 @@ table.places input{ width:100%; padding:4px 6px; }
 <header>
   <h1>사관 스튜디오<small>역사 유튜브 제작 도구</small></h1>
   <input id="proj-title" type="text" placeholder="프로젝트 제목" aria-label="프로젝트 제목">
+  <button class="btn" id="btn-undo" title="AI가 덮어쓰기 전 상태로 되돌립니다" style="padding:4px 10px">↶ 되돌리기</button>
   <span id="ai-badge" class="pill">AI 꺼짐</span>
 </header>
 <nav id="tabs">
@@ -98,13 +99,16 @@ table.places input{ width:100%; padding:4px 6px; }
 
 <section class="tab on" id="tab-source">
   <h2>소스 넣기</h2>
-  <p class="lead">교과서 본문, 사료 번역문, 논문 요약, 내 강의 메모 등을 붙여 넣으세요. 텍스트 파일(.txt, .md)도 불러올 수 있습니다.</p>
+  <p class="lead">교과서 본문, 사료 번역문, 논문 요약, 내 강의 메모 등을 붙여 넣으세요. 텍스트 파일(.txt, .md)은 글로 들어가고,
+    <b>PDF와 사진</b>(교과서·사료 쪽을 찍은 사진)은 첨부로 들어가 AI 모드에서 Claude가 직접 읽습니다.</p>
   <div class="card">
     <textarea id="src-text" placeholder="여기에 소스를 붙여 넣으세요"></textarea>
     <div class="row" style="margin-top:8px">
-      <input type="file" id="src-file" accept=".txt,.md,text/plain">
+      <label class="btn">파일 넣기 (txt·PDF·사진)<input type="file" id="src-file" accept=".txt,.md,text/plain,.pdf,application/pdf,image/*" multiple hidden></label>
       <button class="btn" id="src-sample">예시(임진왜란) 넣기</button>
+      <span class="status" id="src-status"></span>
     </div>
+    <div id="src-files" class="row" style="margin-top:8px"></div>
   </div>
   <div class="card">
     <div class="row">
@@ -152,15 +156,27 @@ table.places input{ width:100%; padding:4px 6px; }
   <div class="grid2">
     <div class="card">
       <canvas id="video-canvas" width="1280" height="720"></canvas>
+      <input type="range" id="vid-seek" min="0" max="1" step="0.1" value="0" style="width:100%;margin-top:6px" aria-label="영상 위치">
       <div class="row" style="margin-top:8px">
         <button class="btn" id="vid-play">재생</button>
-        <button class="btn primary" id="vid-record">WebM으로 녹화</button>
+        <button class="btn primary" id="vid-record">영상 녹화</button>
         <button class="btn" id="vid-draw-all" title="그림이 없는 장면을 Claude가 차례로 그립니다">빈 장면 모두 AI로 그리기</button>
         <label class="inline"><input type="checkbox" id="vid-subs" checked> 자막</label>
         <span class="status" id="vid-status"></span>
       </div>
     </div>
     <div class="card">
+      <div class="card" style="background:var(--bg)">
+        <b>배경음악</b>
+        <p class="small">저작권 걱정 없는 음악(예: 유튜브 스튜디오의 오디오 보관함)을 받아 넣으세요. 내레이션이 나올 때는 자동으로 소리를 줄입니다.</p>
+        <div class="row" id="bgm-row">
+          <label class="btn">음악 파일<input type="file" id="bgm-file" accept="audio/*" hidden></label>
+          <span class="small" id="bgm-name">없음</span>
+          <label class="inline">크기 <input type="range" id="bgm-vol" min="0" max="1" step="0.05" value="0.25"></label>
+          <label class="inline"><input type="checkbox" id="bgm-duck" checked> 말할 때 줄이기</label>
+          <button class="btn" id="bgm-remove">빼기</button>
+        </div>
+      </div>
       <b>장면별 그림과 움직임</b>
       <p class="small">그림은 <b>AI로 그리기</b>(Claude가 세 겹 그림을 그려 시차로 움직임)를 누르거나, 직접 만든 그림 파일을 넣으세요.
         <b>목소리</b>를 녹음하거나 음성 파일을 넣으면 영상 길이가 목소리에 맞춰지고 녹화 영상에 소리가 함께 들어갑니다.</p>
@@ -306,6 +322,11 @@ table.places input{ width:100%; padding:4px 6px; }
     </div>
     <div class="row" style="margin-top:8px"><label class="inline">영상 녹화 형식 <select id="cfg-format"><option value="mp4">MP4 (브라우저가 지원하면)</option><option value="webm">WebM</option></select></label></div>
     <p class="small">키는 이 브라우저(localStorage)에만 저장되며 프로젝트 백업 파일에는 들어가지 않습니다. 요청은 브라우저에서 Anthropic으로 바로 갑니다. <span id="cfg-cost"></span></p>
+  </div>
+  <div class="card">
+    <p><b>되돌리기 기록</b></p>
+    <p class="small">대본을 새로 만들거나 AI로 고치기·그리기, 백업 불러오기, 새 프로젝트 전에 그때 상태를 자동으로 남깁니다 (최근 10개).</p>
+    <div id="undo-list"></div>
   </div>
   <div class="card">
     <p><b>프로젝트</b></p>
