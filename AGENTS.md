@@ -46,7 +46,7 @@ This repo was started from the same author's 어전회의 (eojeon) project and f
 ```
 npm run setup     # npm install + npx playwright install chromium (needs internet)
 npm run check     # syntax of every script + index.html script list (offline, a second)
-npm test          # node tests/e2e.mjs — 77 Playwright tests (Chromium runs with a fake microphone);
+npm test          # node tests/e2e.mjs — 78 Playwright tests (Chromium runs with a fake microphone);
                   # Claude / OpenAI / Gemini / YouTube oEmbed are all mocked, so no keys or network are needed
 ```
 Codex sandboxes usually have no network while the agent runs: do `npm run setup` in the environment's setup
@@ -146,9 +146,11 @@ Drawing code sizes things by `Math.min(w, h) / 720` so the same code serves 16:9
 - Material workflow indicator in `assets/materials-ui.js` uses `aria-current=step` based on current plan/approval state. Existing element IDs remain the event/test contract.
 
 ## Teaching material workspace
-- `assets/teaching.js` / `assets/teaching-ui.js`: `teaching` tab, using existing scenes. `scene.teaching` stores `{kind(auto|photo|artifact|illust|map|quote|title), image(dataURL|null), shotId?, credit,url,rights,checked,caption,quote,include?,intro?,marks[],crop,basis}`. Marks/crop coordinates are normalized 0..1. Defaults are created lazily for old projects. Data lives in existing project backups/IndexedDB.
+- `assets/teaching.js` / `assets/teaching-ui.js`: `teaching` tab, using existing scenes. `scene.teaching` stores `{kind(auto|photo|artifact|illust|map|quote|title), image(dataURL|null), shotId?, credit,url,rights,checked,checkedBasis?,caption,quote,include?,intro?,marks[],crop,basis}`. Marks/crop coordinates are normalized 0..1. Defaults are created lazily for old projects. Data lives in existing project backups/IndexedDB.
 - Source images are contained (not cropped) in 1920×1080. `basis` fingerprints rendered source inputs; replacing a source disables stale marks/crops. Manual/source uploads clear source credit verification. Imported/generated image provenance must not be claimed automatically; users record sources.
 - `exportTeachingPack`: snapshots selected scenes and map; exports ready base, optional title, marks and crop PNGs + JSON/TXT source manifest with skipped reasons. `exportTeachingPptx`: selected scenes must all be ready, same sequence, right speaker space, editable caption, full narration/source notes. Existing storyboard exports remain available separately.
 - Reconfirming material plans preserves teaching settings for matching material IDs with unchanged narration. Changing imagery invalidates annotations by fingerprint. A stale material plan blocks exports.
 - `docs/CHANNEL_ANALYSIS.md`: observational sample of all 10 public videos, not whole-channel full-duration viewing or historical fact validation.
-- `TEST_FILTER='강의 자료:' npm test` runs the focused teaching tests. Full `npm test` still required before committing (now 77 cases).
+- `TEST_FILTER='강의 자료:' npm test` runs the focused teaching tests. Full `npm test` still required before committing (now 78 cases).
+
+- Teaching readiness is metadata-based (image decode still happens at preview/export). `checkedBasis` binds the user source confirmation to the rendered source; changed sources are unverified. Explicit missing shot selections never fall back to unrelated scene images. `tools/screens.mjs` also captures the teaching readiness UI.

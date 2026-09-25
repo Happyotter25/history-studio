@@ -78,4 +78,17 @@ const kinds = await pg.evaluate(() => {
   return c.toDataURL('image/png').split(',')[1];
 });
 (await import('node:fs')).writeFileSync(path.join(root, 'docs/scene-kinds.png'), Buffer.from(kinds, 'base64'));
+// 강의 자료 작업실은 별도 프로젝트 저장소에서 재현합니다.
+const teaching = await b.newPage({viewport:{width:1440,height:1050}});
+await teaching.goto('file://' + path.join(root,'index.html'));
+await teaching.waitForSelector('body[data-ready]');
+await teaching.click('#material-sample');await teaching.click('#material-propose');await teaching.click('#material-confirm');
+await teaching.click('#tabs button[data-tab=teaching]');await teaching.selectOption('#teaching-scene','7');
+await teaching.waitForFunction(()=>!document.getElementById('teaching-png').disabled);
+await teaching.click('.teaching-coordinates summary');await teaching.click('#teaching-add');
+await teaching.click('#teaching-summary');
+await teaching.addStyleTag({content:'*{scroll-behavior:auto!important}'});
+await teaching.evaluate(()=>window.scrollTo({top:0,behavior:'instant'}));
+await teaching.waitForTimeout(300);
+await teaching.screenshot({path:path.join(root,'docs/teaching.png'),fullPage:true});
 await b.close();

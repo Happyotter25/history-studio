@@ -21,7 +21,7 @@
     if(t.image)return t.image;
     if(k==='photo'||k==='artifact')return null;
     var sh=(s.shots||[]).filter(function(sh){return (!t.shotId||sh.id===t.shotId)&&sh.image&&!sh.redo;})[0];
-    return sh?sh.image:s.image||null;
+    return sh?sh.image:t.shotId?null:s.image||null;
   }
   var hashCache=[];
   function hash(str){
@@ -86,7 +86,15 @@
     return c;
   };
   HS.teachingBlob=function(c){return new Promise(function(ok,fail){c.toBlob(function(b){b?ok(b):fail(new Error('PNG 변환 실패'));},'image/png');});};
-  HS.teachingCredit=function(s,spec){var t=HS.teachingSettings(s);return {title:s.heading,kind:spec.kind,origin:spec.origin,credit:t.credit||(s.data&&s.data.cite)||'',url:t.url,rights:t.rights,sourceChecked:!!t.checked,caption:t.caption};};
+  HS.teachingCredit=function(s,spec){var t=HS.teachingSettings(s);return {title:s.heading,kind:spec.kind,origin:spec.origin,credit:t.credit||(s.data&&s.data.cite)||'',url:t.url,rights:t.rights,sourceChecked:!!t.checked&&t.checkedBasis===spec.basis,caption:t.caption};};
+  HS.teachingReadiness=function(s){
+    var t=HS.teachingSettings(s),spec=HS.teachingSpec(s),reason='';
+    if((t.marks.length||t.crop)&&t.basis!==spec.basis)reason='강조·확대 다시 확인';
+    else if(/^(photo|artifact|illust)$/.test(spec.kind)&&!spec.image)reason='사진·삽화 필요';
+    else if(spec.kind==='map'&&!spec.map.places.length)reason='지도 지명 필요';
+    else if(spec.kind==='quote'&&(t.quote||(s.data&&s.data.translation)||s.narration||'').length>2000)reason='인용문 2,000자 초과';
+    return {included:t.include!==false,ready:!reason,reason:reason,checked:!!t.checked&&t.checkedBasis===spec.basis};
+  };
   function snapshot(){
     if(!HS.project.scenes.length)throw new Error('먼저 제작 목록을 확정하거나 대본을 만들어 주세요.');
     if(HS.project.materials&&!HS.materialApproved())throw new Error('변경한 제작 목록을 먼저 확정해 주세요.');

@@ -15,8 +15,8 @@
   }
   function draw(){
     var n=++revision,p=HS.project,s=scene();prepared=null;resetImage();if(!s)return;
-    var t=HS.teachingSettings(s),spec=HS.teachingSpec(s);
-    $('teaching-origin').textContent=spec.origin+' · '+(t.checked?'출처 확인 표시됨':'출처·이용 조건 확인 필요');
+    var t=HS.teachingSettings(s),spec=HS.teachingSpec(s);$('teaching-checked').checked=HS.teachingReadiness(s).checked;
+    $('teaching-origin').textContent=spec.origin+' · '+(HS.teachingReadiness(s).checked?'출처 확인 표시됨':'출처·이용 조건 확인 필요');
     HS.teachingPrepare(s).then(function(r){if(n!==revision||HS.project!==p||scene()!==s)return;prepared=r;paint();if(r.stale)status('자료가 바뀌었습니다. 이전 강조·확대는 적용하지 않습니다. 표시를 초기화하고 다시 지정해 주세요.',true);else if(locked())status('제작 목록이 바뀌었습니다. 자료 제작에서 확정한 뒤 내보내세요.',true);else status('도구를 고르고 화면을 끌거나 아래 숫자 입력으로 표시하세요.');}).catch(function(e){if(n===revision)status(e.message,true);});
   }
   HS.renderTeaching=function(){
@@ -26,17 +26,27 @@
     var s=scene(),t=HS.teachingSettings(s);
     $('teaching-kind').innerHTML=Object.keys(HS.TEACHING_KINDS).map(function(k){return '<option value="'+k+'">'+HS.TEACHING_KINDS[k]+'</option>';}).join('');$('teaching-kind').value=t.kind;
     $('teaching-shot').innerHTML='<option value="">첫 번째 완료된 삽화</option>'+(s.shots||[]).map(function(sh,i){return '<option value="'+HS.esc(sh.id)+'">'+(i+1)+'. '+HS.esc(sh.desc||s.heading)+(sh.redo?' · 다시 제작 필요':sh.image?' · 완료':' · 대기')+'</option>';}).join('');$('teaching-shot').value=t.shotId||'';
-    ['credit','url','rights','caption','quote'].forEach(function(k){$('teaching-'+k).value=t[k]||'';});$('teaching-checked').checked=!!t.checked;$('teaching-include').checked=t.include!==false;$('teaching-intro').checked=!!t.intro;
+    ['credit','url','rights','caption','quote'].forEach(function(k){$('teaching-'+k).value=t[k]||'';});$('teaching-checked').checked=HS.teachingReadiness(s).checked;$('teaching-include').checked=t.include!==false;$('teaching-intro').checked=!!t.intro;
     $('teaching-narration').textContent=s.narration;
     $('teaching-search').href='https://commons.wikimedia.org/w/index.php?title=Special:MediaSearch&type=image&search='+encodeURIComponent(s.heading);
-    $('teaching-quote').disabled=!(t.kind==='quote'||(t.kind==='auto'&&s.kind==='source'));$('teaching-quote').parentElement.hidden=$('teaching-quote').disabled;$('teaching-remove').disabled=!t.image;link();draw();
+    $('teaching-quote').disabled=!(t.kind==='quote'||(t.kind==='auto'&&s.kind==='source'));$('teaching-quote').parentElement.hidden=$('teaching-quote').disabled;$('teaching-remove').disabled=!t.image;link();report();draw();
   };
-  function changed(){HS.changed('teaching');}
+  function report(){
+    var ss=HS.project.scenes,rows=ss.map(HS.teachingReadiness),included=rows.filter(function(r){return r.included;}),ready=included.filter(function(r){return r.ready;}).length;
+    $('teaching-summary').textContent='선택 '+included.length+'구간 · 자료 준비 '+ready+' · 보완 필요 '+(included.length-ready)+' · 출처 미확인 '+included.filter(function(r){return !r.checked;}).length;
+    $('teaching-readiness').innerHTML=ss.map(function(s,i){var r=rows[i];return '<button type="button" class="btn" data-scene="'+i+'"'+(i===selected?' aria-current="true"':'')+'>'+HS.esc((i+1)+'. '+s.heading+' · '+(!r.included?'출력 제외':r.reason||'자료 준비됨'))+'</button>';}).join('');
+    $('teaching-ppt').disabled=busy||locked()||!included.length||ready!==included.length;
+    $('teaching-pack').disabled=busy||locked()||!ready;
+  }
+  $('teaching-readiness').onclick=function(e){var b=e.target.closest('[data-scene]');if(b){selected=+b.dataset.scene;HS.renderTeaching();}};
+  function changed(){HS.changed('teaching');report();}
+  function clearCredit(t){t.checked=false;t.checkedBasis='';t.credit='';t.url='';t.rights='확인 필요';}
+
   $('teaching-scene').onchange=function(){selected=+this.value;HS.renderTeaching();};
   $('teaching-kind').onchange=function(){HS.teachingSettings(scene()).kind=this.value;changed();HS.renderTeaching();};
-  $('teaching-shot').onchange=function(){HS.teachingSettings(scene()).shotId=this.value;changed();draw();};
+  $('teaching-shot').onchange=function(){var t=HS.teachingSettings(scene());t.shotId=this.value;if(!t.image)clearCredit(t);changed();HS.renderTeaching();};
   ['credit','url','rights','caption','quote'].forEach(function(k){$('teaching-'+k).oninput=function(){HS.teachingSettings(scene())[k]=this.value;changed();if(k==='url')link();if(k==='quote'||k==='credit')draw();else paint();};});
-  ['checked','include','intro'].forEach(function(k){$('teaching-'+k).onchange=function(){HS.teachingSettings(scene())[k]=this.checked;changed();draw();};});
+  ['checked','include','intro'].forEach(function(k){$('teaching-'+k).onchange=function(){var t=HS.teachingSettings(scene());t[k]=this.checked;if(k==='checked')t.checkedBasis=this.checked?HS.teachingSpec(scene()).basis:'';changed();draw();};});
   $('teaching-file').onchange=function(){
     var f=this.files[0];this.value='';if(!f)return;var p=HS.project,s=scene(),t=HS.teachingSettings(s),old=t.image;
     if(!/^image\/(png|jpeg|webp)$/.test(f.type)||f.size>20*1024*1024){status('PNG·JPG·WebP 파일을 20MB 이하로 넣어 주세요.',true);return;}
@@ -46,7 +56,7 @@
       t.image=u;if(!/^(photo|artifact|illust)$/.test(t.kind))t.kind='photo';t.checked=false;t.credit='';t.url='';t.rights='확인 필요';changed();HS.renderTeaching();
     }).catch(function(e){status(e.message,true);});
   };
-  $('teaching-remove').onclick=function(){HS.teachingSettings(scene()).image=null;changed();HS.renderTeaching();};
+  $('teaching-remove').onclick=function(){var t=HS.teachingSettings(scene());t.image=null;clearCredit(t);changed();HS.renderTeaching();};
   $('teaching-view').onchange=function(){status('');paint();};
   function saveHistory(t){history.push({marks:JSON.parse(JSON.stringify(t.marks)),crop:t.crop?JSON.parse(JSON.stringify(t.crop)):null,basis:t.basis});if(history.length>30)history.shift();}
   function add(m){
@@ -65,7 +75,7 @@
   $('teaching-add').onclick=function(){var m={type:$('teaching-tool').value},valid=true;['x','y','x2','y2'].forEach(function(k){var v=+$('teaching-'+k).value;if(!isFinite(v)||v<0||v>100)valid=false;m[k]=v/100;});if(!valid){status('좌표는 0~100 사이의 숫자로 넣어 주세요.',true);return;}add(m);};
   $('teaching-undo').onclick=function(){var t=HS.teachingSettings(scene()),last=history.pop();if(!last){status('되돌릴 표시가 없습니다.');return;}Object.keys(last).forEach(function(k){t[k]=last[k];});changed();draw();};
   $('teaching-clear').onclick=function(){if(!prepared)return;var t=HS.teachingSettings(scene());saveHistory(t);t.marks=[];t.crop=null;t.basis=prepared.spec.basis;prepared.stale=false;changed();$('teaching-view').value='marked';status('표시를 초기화했습니다. 되돌리기로 복원할 수 있습니다.');paint();};
-  function job(fn){if(busy)return;busy=true;['teaching-pack','teaching-ppt','teaching-png'].forEach(function(id){$(id).disabled=true;});status('자료를 준비하고 있습니다…');Promise.resolve().then(fn).then(function(){status('파일을 저장했습니다. 묶음의 출처 목록에서 제외된 자료도 확인하세요.');}).catch(function(e){status(e.message,true);}).finally(function(){busy=false;$('teaching-pack').disabled=false;$('teaching-ppt').disabled=false;paint();});}
+  function job(fn){if(busy)return;busy=true;['teaching-pack','teaching-ppt','teaching-png'].forEach(function(id){$(id).disabled=true;});status('자료를 준비하고 있습니다…');Promise.resolve().then(fn).then(function(){status('파일을 저장했습니다. 묶음의 출처 목록에서 제외된 자료도 확인하세요.');}).catch(function(e){status(e.message,true);}).finally(function(){busy=false;report();paint();});}
   $('teaching-pack').onclick=function(){job(function(){return HS.exportTeachingPack();});};$('teaching-ppt').onclick=function(){job(function(){return HS.exportTeachingPptx();});};
   $('teaching-png').onclick=function(){job(function(){
     if(!prepared||prepared.stale||locked())throw new Error('현재 자료와 제작 목록을 먼저 확인해 주세요.');

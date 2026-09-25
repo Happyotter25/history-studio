@@ -184,6 +184,7 @@ table.places input{ width:100%; padding:4px 6px; }
   <p id="teaching-empty" class="card">자료 제작에서 대본의 제작 목록을 확정하면 시작할 수 있습니다. <button class="btn" data-go="materials">자료 제작으로</button></p>
   <div id="teaching-work" hidden>
     <div class="card row"><label>원고 구간 <select id="teaching-scene" aria-label="강의 자료 구간"></select></label><label><input type="checkbox" id="teaching-include"> 묶음·PPT에 포함</label><label><input type="checkbox" id="teaching-intro"> 주제 제목 카드 추가</label><button class="btn" id="teaching-pack">원본·강조·확대 PNG 묶음</button><button class="btn" id="teaching-ppt">강의 스토리 PPT</button></div>
+    <details class="card teaching-readiness"><summary id="teaching-summary"></summary><p class="muted">구간을 누르면 바로 이동합니다. 출처 확인은 직접 검토한 경우에 표시하세요. 파일 손상 여부는 미리보기와 출력 시 확인합니다.</p><div id="teaching-readiness"></div></details>
     <div class="teaching-workspace">
       <div class="card teaching-editor">
         <h3>자료와 출처</h3><label>자료 종류<select id="teaching-kind"></select></label>

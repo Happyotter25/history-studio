@@ -1489,6 +1489,23 @@ await test('강의 자료: 미완성 제외·인용문·제목·확정 전 출�
   });assert.match(r.skipped,/아직 없습니다/);assert.equal(r.q,'quote');assert.equal(r.title,'title');assert.match(r.blocked,/확정/);await pg.context().close();
 });
 
+await test('강의 자료: 준비 현황·구간 이동·출처 재확인·선택 삽화 누락',async()=>{
+  const pg=await materialFixture(true);await pg.click('#tabs button[data-tab=teaching]');
+  assert.ok(await pg.locator('#teaching-ppt').isDisabled());
+  assert.match(await pg.locator('#teaching-summary').textContent(),/보완 필요/);
+  await pg.click('#teaching-summary');await pg.click('#teaching-readiness [data-scene="7"]');
+  assert.equal(await pg.locator('#teaching-scene').inputValue(),'7');
+  await pg.check('#teaching-checked');
+  assert.ok(await pg.evaluate(()=>HS.teachingReadiness(HS.project.scenes[7]).checked));
+  await pg.selectOption('#teaching-kind','title');
+  assert.ok(!await pg.locator('#teaching-checked').isChecked());
+  const r=await pg.evaluate(()=>{
+    const s=HS.project.scenes[0],t=HS.teachingSettings(s);s.image='old image';t.shotId='missing';
+    return {image:HS.teachingSpec(s).image,ready:HS.teachingReadiness(s).ready,checked:HS.teachingCredit(HS.project.scenes[7],HS.teachingSpec(HS.project.scenes[7])).sourceChecked};
+  });assert.equal(r.image,null);assert.equal(r.ready,false);assert.equal(r.checked,false);
+  await pg.context().close();
+});
+
 await browser.close();
 const bad = results.filter(r => !r[0]);
 console.log(`\n${results.length - bad.length} / ${results.length} 통과`);
