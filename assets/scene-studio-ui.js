@@ -14,7 +14,7 @@
     var p=plan(),done=p.slides.filter(function(s){return HS.studioReviewed(p,s);}).length;
     $('studio-progress').textContent=p.mode==='input'?'1. 대본 분석':p.mode==='review'?'2. 장면 구분 검토 · '+p.slides.length+'장면':'3. 장면 만들기 · 검토 완료 '+done+' / '+p.slides.length;
     $('studio-png-all').disabled=busy||p.mode!=='compose'||done!==p.slides.length||!done;$('studio-ppt-all').disabled=$('studio-png-all').disabled;
-    $('studio-outline').innerHTML=p.slides.map(function(s,i){return '<button type="button" class="btn" data-studio-scene="'+i+'"'+(selected===i?' aria-current="true"':'')+'><b>'+String(i+1).padStart(2,'0')+'. '+HS.esc(s.title)+'</b><small>'+({text:'글',board:'판서',image:'이미지'}[s.type])+' · '+(HS.studioReviewed(p,s)?'검토 완료':HS.studioProblem(s)?'내용 필요':'검토 대기')+'</small></button>';}).join('');
+    $('studio-outline').innerHTML=p.slides.map(function(s,i){return '<button type="button" class="btn" data-studio-scene="'+i+'"'+(selected===i?' aria-current="true"':'')+'>'+(s.image?'<img src="'+HS.esc(s.image)+'" alt="장면 미리보기" loading="lazy">':'')+'<b>'+String(i+1).padStart(2,'0')+'. '+HS.esc(s.title)+'</b><small>'+({text:'글',board:'판서',image:'이미지'}[s.type])+' · '+(HS.studioReviewed(p,s)?'검토 완료':HS.studioProblem(s)?'내용 필요':'검토 대기')+'</small></button>';}).join('');
     if(current())$('studio-review-state').textContent=HS.studioReviewed(p,current())?'✓ 검토 완료':'○ 검토 대기 · 내용을 수정하면 다시 검토해야 합니다.';
   }
   HS.renderSceneStudio=function(){
@@ -22,7 +22,7 @@
     $('studio-fields').disabled=busy;$('studio-cancel').hidden=!busy||!jobId;$('studio-input').hidden=p.mode!=='input';$('studio-work').hidden=p.mode==='input';
     $('studio-script').value=p.script;$('studio-method').textContent=p.method;$('studio-return').hidden=!p.slides.length||p.script!==p.analyzedScript;
     $('studio-boundaries').hidden=p.mode!=='review';$('studio-editor').hidden=p.mode!=='compose';$('studio-confirm-plan').hidden=p.mode!=='review';$('studio-reopen-plan').hidden=p.mode!=='compose';
-    renderPromptProposal();overview();if(!p.slides.length){previewRevision++;return;}var s=current();
+    renderBatch();renderPromptProposal();overview();if(!p.slides.length){previewRevision++;return;}var s=current();
     $('studio-source').open=p.mode==='review';$('studio-original').value=p.script.slice(s.start,s.end);$('studio-reason').textContent=s.reason;
     $('studio-scene-title').value=s.title;$('studio-type').value=s.type;$('studio-content').value=s.content;$('studio-prompt').value=s.prompt;$('studio-credit').value=s.credit;
     $('studio-content-label').hidden=s.type==='image';$('studio-image-editor').hidden=s.type!=='image';$('studio-content-help').textContent=s.type==='board'?'줄마다 판서 항목을 쓰세요. *핵심어는 노란색, !주의는 분홍색, -는 들여쓰기입니다.':'슬라이드에 보여 줄 핵심 문장을 직접 다듬어 주세요. 원고 전체는 발표자 노트에 보존됩니다.';
@@ -63,6 +63,55 @@
     var a=promptProposal,valid=a&&a.project===HS.project&&a.plan===plan()&&a.scene===current()&&a.before===JSON.stringify(current());
     $('studio-prompt-proposal').hidden=!valid;if(valid)$('studio-proposed-prompt').value=a.text;
   }
+  function imageReady(s){return s.type==='image'&&!!s.image&&s.imagePrompt===s.prompt;}
+  function renderBatch(){
+    var p=plan(),ready=p.slides.filter(imageReady).length,errors=p.slides.filter(function(s){return s.production&&s.production.state==='error';}).length;
+    $('studio-batch').hidden=p.mode!=='compose';$('studio-batch-style').value=p.imageStyle||'';
+    $('studio-batch-summary').textContent='이미지 준비 '+ready+' / '+p.slides.length+' · 프롬프트 '+p.slides.filter(function(s){return !!s.prompt.trim();}).length+' · 실패 '+errors+' · 검토 완료 '+p.slides.filter(function(s){return HS.studioReviewed(p,s);}).length;
+    $('studio-batch-progress').max=p.slides.length||1;$('studio-batch-progress').value=ready;
+    $('studio-batch-log').innerHTML=p.slides.map(function(s){return '<li>'+HS.esc(s.title)+' — '+HS.esc(s.production?(!busy&&['prompt','image'].includes(s.production.state)?'이전 작업 중단 · 미완성 채우기로 이어가세요':s.production.message):imageReady(s)?'이미지 준비 완료':'대기')+'</li>';}).join('');
+  }
+  $('studio-batch-style').oninput=function(){plan().imageStyle=this.value;save();};
+  $('studio-next-review').onclick=function(){var p=plan(),i=p.slides.findIndex(function(s,i){return i>selected&&!HS.studioReviewed(p,s);});if(i<0)i=p.slides.findIndex(function(s){return !HS.studioReviewed(p,s);});if(i>=0){selected=i;HS.renderSceneStudio();$('studio-editor').scrollIntoView({block:'start',behavior:'smooth'});}else message('모든 장면의 검토가 끝났습니다.');};
+  function batch(withImages){job(async function(){
+    var project=HS.project,p=plan(),scope=$('studio-batch-scope').value;HS.studioValidate(p);
+    if(p.mode!=='compose')throw new Error('장면 구분을 확정한 뒤 시작하세요.');
+    var targets=p.slides.filter(function(s){return scope==='failed'?s.production&&s.production.state==='error':scope==='all'||(withImages?!imageReady(s):!s.prompt.trim());});
+    if(!targets.length){message('선택한 범위에 작업할 장면이 없습니다.');return;}
+    var expected=JSON.stringify(p);
+    function valid(){return HS.project===project&&plan()===p&&JSON.stringify(p)===expected;}
+    function guard(){if(cancelled)throw new Error('작업을 중단했습니다. 완성된 장면은 보존됩니다.');if(!valid())throw new Error('프로젝트나 장면이 바뀌어 전체 제작을 중단했습니다.');}
+    function commit(){save();expected=JSON.stringify(p);HS.renderSceneStudio();}
+    await HS.snapshot('전체 장면 자동 제작 전',true);guard();promptProposal=null;
+    var done=0,failed=0;
+    for(var i=0;i<targets.length;i++){
+      guard();var scene=targets[i];selected=p.slides.indexOf(scene);
+      try{
+        // 재시도는 이미 저장된 프롬프트를 재사용합니다. 전체 다시 만들기는 새로 작성합니다.
+        if(scope==='all'||!scene.prompt.trim()){
+          scene.production={state:'prompt',message:'프롬프트 작성 중'};commit();
+          var draft=await runCodex('prompt',JSON.stringify({title:scene.title,narration:p.script.slice(scene.start,scene.end),purpose:scene.reason,existingPrompt:[scene.prompt,p.imageStyle||''].filter(Boolean).join('\n')}));guard();
+          if(typeof draft.generatedPrompt!=='string'||!draft.generatedPrompt.trim()||draft.generatedPrompt.length>2000)throw new Error('유효한 프롬프트를 받지 못했습니다.');
+          scene.prompt=draft.generatedPrompt;scene.reviewed='';
+        }
+        scene.type='image';scene.reviewed='';scene.production={state:'ready',message:'프롬프트 준비 완료'};commit();
+        if(withImages){
+          scene.production={state:'image',message:'이미지 생성 중 · '+(i+1)+' / '+targets.length};commit();
+          var result=await runCodex('image','Educational historical illustration for exactly one slide. No text or labels. Do not invent historical details as facts.\n'+JSON.stringify({scene:scene.title,narration:p.script.slice(scene.start,scene.end),visualDescription:scene.prompt,style:p.imageStyle||''}));guard();
+          await HS.loadImage(result.image);guard();attach(scene,result.image);scene.credit='AI 재현 삽화 · 역사적 세부 확인 필요';
+          scene.production={state:'done',message:'이미지 완성 · 사람 검토 대기'};commit();
+        }
+        done++;
+      }catch(e){
+        if(!valid())throw e;
+        scene.production={state:cancelled?'paused':'error',message:cancelled?'중단됨 · 미완성 채우기로 이어서 제작':e.message};commit();
+        if(cancelled)throw e;failed++;
+      }
+      jobId='';message('전체 제작 '+(i+1)+' / '+targets.length+' · 완료 '+done+' · 실패 '+failed);
+    }
+    message((withImages?'전체 이미지 제작':'전체 프롬프트 작성')+' 종료 · 완료 '+done+' · 실패 '+failed+'. 장면별 결과를 검토하세요.');
+  });}
+  $('studio-batch-images').onclick=function(){batch(true);};$('studio-batch-prompts').onclick=function(){batch(false);};
   $('studio-auto-prompt').onclick=function(){job(async function(){
     var project=HS.project,p=plan(),s=current(),before=JSON.stringify(s);HS.studioValidate(p);if(p.mode!=='compose'||s.type!=='image')throw new Error('장면 만들기에서 이미지 표현을 선택해 주세요.');promptProposal=null;
     var result=await runCodex('prompt',JSON.stringify({title:s.title,narration:p.script.slice(s.start,s.end),purpose:s.reason,existingPrompt:s.prompt}));

@@ -63,3 +63,26 @@ test('이미지 프롬프트: 자동 초안→검토 적용, 원고 전달·그�
  await page.click('#studio-auto-prompt');while(!release)await new Promise(r=>setTimeout(r,10));await page.evaluate(()=>{HS.project=JSON.parse(JSON.stringify(HS.project));HS.changed('all');});release();await page.waitForFunction(()=>document.getElementById('studio-status').textContent.includes('장면이 바뀌어'));assert.ok(await page.locator('#studio-prompt-proposal').isHidden());
  }finally{release?.();await browser.close();await new Promise(r=>server.close(r));}
 });
+
+test('전체 장면: 순차 제작·실패 재시도·완성 보존·중단·새로고침 이어가기',async()=>{
+ const {chromium}=await import('playwright');const calls=[];let fail=true,hold=false,release;
+ const server=createStudioServer({status:async()=>({ready:true}),runner:async(job,update,register)=>{
+  calls.push(job.kind);if(hold)await new Promise(r=>{release=r;register(r);});
+  if(job.kind==='prompt')return Buffer.from(JSON.stringify({prompt:'원고에 맞는 역사 삽화, 16:9, 글자 없음'}));
+  if(fail){fail=false;throw Error('test failure');}return png;
+ }});await new Promise(r=>server.listen(0,'127.0.0.1',r));const browser=await chromium.launch({executablePath:process.env.CHROMIUM_PATH||undefined});
+ try{
+  const page=await browser.newPage();await page.goto('http://127.0.0.1:'+server.address().port);await page.waitForSelector('body[data-ready]');
+  await page.fill('#studio-script','수군을 재건합니다.\n\n군량을 모읍니다.');await page.click('#studio-paragraph');await page.waitForFunction(()=>HS.project.studio.mode==='review');await page.click('#studio-confirm-plan');await page.waitForFunction(()=>HS.project.studio.mode==='compose');
+  await page.fill('#studio-batch-style','절제된 수채화');await page.click('#studio-batch-images');await page.waitForFunction(()=>!document.getElementById('studio-fields').disabled);
+  assert.deepEqual(calls,['prompt','image','prompt','image']);assert.equal(await page.evaluate(()=>HS.project.studio.slides[0].production.state),'error');assert.equal(await page.evaluate(()=>HS.project.studio.slides[1].production.state),'done');
+  assert.ok(await page.evaluate(()=>HS.project.studio.slides.every(s=>s.type==='image'&&!s.reviewed)));
+  await page.selectOption('#studio-batch-scope','failed');await page.click('#studio-batch-images');await page.waitForFunction(()=>!document.getElementById('studio-fields').disabled);
+  assert.equal(calls.length,5);assert.equal(await page.evaluate(()=>HS.project.studio.slides.filter(s=>s.image).length),2);
+  await page.selectOption('#studio-batch-scope','missing');await page.click('#studio-batch-images');await page.waitForFunction(()=>!document.getElementById('studio-fields').disabled);assert.equal(calls.length,5);
+  await page.selectOption('#studio-batch-scope','all');hold=true;await page.click('#studio-batch-images');while(!release)await new Promise(r=>setTimeout(r,10));await page.click('#studio-cancel');await page.waitForFunction(()=>!document.getElementById('studio-fields').disabled);assert.equal(await page.evaluate(()=>HS.project.studio.slides[0].production.state),'paused');assert.equal(calls.length,6);hold=false;
+  await page.reload();await page.waitForSelector('body[data-ready]');assert.equal(await page.locator('#studio-batch-style').inputValue(),'절제된 수채화');assert.equal(await page.evaluate(()=>HS.project.studio.slides.filter(s=>s.image).length),2);
+  await page.selectOption('#studio-batch-scope','all');await page.click('#studio-batch-prompts');await page.waitForFunction(()=>!document.getElementById('studio-fields').disabled);assert.deepEqual(calls.slice(6),['prompt','prompt']);assert.equal(await page.evaluate(()=>HS.project.studio.slides.filter(s=>s.image).length),2);
+  hold=true;release=null;await page.click('#studio-batch-images');while(!release)await new Promise(r=>setTimeout(r,10));await page.evaluate(()=>{HS.project=JSON.parse(JSON.stringify(HS.project));HS.project.studio.slides[0].title='사용자 변경';HS.changed('all');});release();await page.waitForFunction(()=>!document.getElementById('studio-fields').disabled);assert.match(await page.locator('#studio-status').textContent(),/바뀌어/);assert.equal(calls.length,9);assert.equal(await page.evaluate(()=>HS.project.studio.slides[0].title),'사용자 변경');
+ }finally{release?.();await browser.close();await new Promise(r=>server.close(r));}
+});
