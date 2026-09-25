@@ -21,6 +21,7 @@
   }
   HS.renderTeaching=function(){
     var ss=HS.project.scenes;selected=Math.min(selected,Math.max(0,ss.length-1));prepared=null;drag=null;history=[];
+    $('tab-teaching').classList.toggle('has-scenes',!!ss.length);overview();$('teaching-script').value=HS.project.materials?HS.project.materials.script:'';
     $('teaching-empty').hidden=!!ss.length;$('teaching-work').hidden=!ss.length;if(!ss.length){revision++;return;}
     $('teaching-scene').innerHTML=ss.map(function(s,i){return '<option value="'+i+'">'+(i+1)+'. '+HS.esc(s.heading)+'</option>';}).join('');$('teaching-scene').value=selected;
     var s=scene(),t=HS.teachingSettings(s);
@@ -29,16 +30,37 @@
     $('teaching-shot').innerHTML='<option value="">첫 번째 완료된 삽화</option>'+(s.shots||[]).map(function(sh,i){return '<option value="'+HS.esc(sh.id)+'">'+(i+1)+'. '+HS.esc(sh.desc||s.heading)+(sh.redo?' · 다시 제작 필요':sh.image?' · 완료':' · 대기')+'</option>';}).join('');$('teaching-shot').value=t.shotId||'';
     ['credit','url','rights','caption','quote'].forEach(function(k){$('teaching-'+k).value=t[k]||'';});$('teaching-checked').checked=HS.teachingReadiness(s).checked;$('teaching-include').checked=t.include!==false;$('teaching-intro').checked=!!t.intro;
     $('teaching-narration').textContent=s.narration;
+    $('teaching-current-title').textContent=(selected+1)+'. '+s.heading;$('teaching-current-script').textContent=s.narration||'원고가 없습니다.';$('teaching-current-brief').textContent='제작 지시: '+(s.visual||'원고를 설명할 사진·지도·삽화를 선택하세요.');
+    $('teaching-prev').disabled=selected===0;$('teaching-next').disabled=selected===ss.length-1;
     $('teaching-search').href='https://commons.wikimedia.org/w/index.php?title=Special:MediaSearch&type=image&search='+encodeURIComponent(s.heading);
     $('teaching-quote').disabled=!(t.kind==='quote'||(t.kind==='auto'&&s.kind==='source'));$('teaching-quote').parentElement.hidden=$('teaching-quote').disabled;$('teaching-remove').disabled=!t.image;link();report();draw();
   };
   function report(){
     var ss=HS.project.scenes,rows=ss.map(HS.teachingReadiness),included=rows.filter(function(r){return r.included;}),ready=included.filter(function(r){return r.ready;}).length;
     $('teaching-summary').textContent='선택 '+included.length+'구간 · 자료 준비 '+ready+' · 보완 필요 '+(included.length-ready)+' · 출처 미확인 '+included.filter(function(r){return !r.checked;}).length;
-    $('teaching-readiness').innerHTML=ss.map(function(s,i){var r=rows[i];return '<button type="button" class="btn" data-scene="'+i+'"'+(i===selected?' aria-current="true"':'')+'>'+HS.esc((i+1)+'. '+s.heading+' · '+(!r.included?'출력 제외':r.reason||'자료 준비됨'))+'</button>';}).join('');
+    var filter=$('teaching-filter').value,query=$('teaching-search-scenes').value.trim().toLowerCase(),pngs=0;
+    rows.forEach(function(r,i){if(r.included&&r.ready){var t=HS.teachingSettings(ss[i]);pngs+=1+(t.marks.length?1:0)+(t.crop?1:0)+(t.intro&&HS.teachingSpec(ss[i]).kind!=='title'?1:0);}});
+    $('teaching-output-count').textContent='현재 준비된 PNG '+pngs+'장 · 출처 목록 함께 저장';
+    $('teaching-readiness').innerHTML=ss.map(function(s,i){var r=rows[i];if(query&&(s.heading+' '+s.narration).toLowerCase().indexOf(query)<0)return '';if(filter==='needs'&&(!r.included||r.ready)||filter==='ready'&&(!r.included||!r.ready)||filter==='unchecked'&&(!r.included||r.checked)||filter==='excluded'&&r.included)return '';return '<button type="button" class="btn" data-scene="'+i+'"'+(i===selected?' aria-current="true"':'')+'>'+HS.esc((i+1)+'. '+s.heading)+'<small>'+HS.esc(!r.included?'출력 제외':r.reason||'자료 준비됨')+' · '+HS.esc(HS.TEACHING_KINDS[HS.teachingSettings(s).kind])+'</small></button>';}).join('')||'<p class="small">조건에 맞는 구간이 없습니다. 검색어나 보기 조건을 바꿔 주세요.</p>';
     $('teaching-ppt').disabled=busy||locked()||!included.length||ready!==included.length;
-    $('teaching-pack').disabled=busy||locked()||!ready;
+    $('teaching-pack').disabled=busy||locked()||!ready;overview();
   }
+  function overview(){
+    var ss=HS.project.scenes,rows=ss.map(HS.teachingReadiness),included=rows.filter(function(r){return r.included;}),ready=included.filter(function(r){return r.ready;}).length;
+    var stage=!ss.length||locked()?'plan':ready<included.length?'make':'export';
+    if(stage==='export'&&ss[selected]){var t=HS.teachingSettings(ss[selected]);if(!t.marks.length&&!t.crop)stage='refine';}
+    ['plan','make','refine','export'].forEach(function(k){var el=$('teaching-step-'+k);if(k===stage)el.setAttribute('aria-current','step');else el.removeAttribute('aria-current');});
+    $('teaching-project-status').textContent=ss.length?(HS.project.title||'내 강의')+' · '+ss.length+'구간 · 선택 자료 '+ready+'/'+included.length+' 준비':'대본 한 편으로 강의 자료를 시작하세요';
+    $('teaching-next-hint').textContent=!ss.length?'대본을 넣고 제작 목록을 검토하세요. 확정 전에는 그림을 만들지 않습니다.':locked()?'대본 또는 제작 목록이 바뀌었습니다. 목록을 다시 확정해 주세요.':ready<included.length?'사진·삽화가 없거나 강조 위치를 다시 확인할 구간부터 이어서 작업하세요.':'원고와 출처를 확인하고 필요한 강조·확대를 더하세요. PNG 묶음으로 한 번에 저장할 수 있습니다.';
+    $('teaching-next-action').textContent=!ss.length?'대본 입력하기':locked()?'제작 목록 확인':ready<included.length?'다음 보완 구간으로':'PNG 저장 위치로';
+  }
+  $('teaching-next-action').onclick=function(){if(!HS.project.scenes.length){$('teaching-script').focus();$('teaching-script').scrollIntoView({block:'center'});return;}if(locked()){HS.show('materials');return;}var ss=HS.project.scenes;for(var n=1;n<=ss.length;n++){var i=(selected+n)%ss.length,r=HS.teachingReadiness(ss[i]);if(r.included&&!r.ready){selected=i;HS.renderTeaching();$('teaching-current-title').scrollIntoView({block:'center'});return;}}$('teaching-pack').scrollIntoView({block:'center'});$('teaching-pack').focus();};
+  $('teaching-prev').onclick=function(){if(selected>0){selected--;HS.renderTeaching();}};
+  $('teaching-next').onclick=function(){if(selected<HS.project.scenes.length-1){selected++;HS.renderTeaching();}};
+  $('teaching-filter').onchange=report;$('teaching-search-scenes').oninput=report;
+  $('teaching-script').oninput=function(){var m=HS.project.materials;if(!m)m=HS.project.materials={script:'',plannedScript:'',approved:'',groups:[],method:''};m.script=this.value;m.approved='';HS.changed('materials');};
+  $('teaching-plan').onclick=function(){HS.show('materials');$('material-propose').click();};
+  $('teaching-sample').onclick=function(){HS.show('materials');$('material-sample').click();};
   $('teaching-readiness').onclick=function(e){var b=e.target.closest('[data-scene]');if(b){selected=+b.dataset.scene;HS.renderTeaching();}};
   function changed(){HS.changed('teaching');report();}
   function clearCredit(t){t.checked=false;t.checkedBasis='';t.credit='';t.url='';t.rights='확인 필요';}

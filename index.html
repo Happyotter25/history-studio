@@ -133,8 +133,8 @@ table.places input{ width:100%; padding:4px 6px; }
 </header>
 <nav id="tabs" aria-label="스튜디오 도구">
   <span class="nav-label">제작 워크스페이스</span>
-  <button data-tab="materials" class="on">자료 제작</button>
-  <button data-tab="teaching">강의 자료 작업실</button>
+  <button data-tab="teaching" class="on">강의 자료 작업실</button>
+  <button data-tab="materials">대본·제작 목록</button>
   <button data-tab="shots">삽화·이미지</button>
   <button data-tab="story">스토리 PPT</button>
   <button data-tab="map">지도 PNG</button>
@@ -149,8 +149,8 @@ table.places input{ width:100%; padding:4px 6px; }
   <button data-tab="settings">설정</button>
 </nav>
 <main>
-<section class="tab on" id="tab-materials">
-  <div class="material-hero"><div class="hero-copy"><span class="hero-eyebrow">HISTORY · CREATIVE STUDIO</span><h2>이야기가 시작되는 곳,<br>사관 스튜디오.</h2><p class="lead">한 편의 대본을 삽화와 지도, 스토리 PPT로.<br>수업과 영상에 필요한 자료를 한곳에서 준비하세요.</p></div><div class="hero-art" aria-hidden="true"><div class="hero-sheet"><i></i><i></i><i></i><i></i><i></i></div><div class="hero-picture"></div></div></div>
+<section class="tab" id="tab-materials">
+  <div class="material-hero"><div class="hero-copy"><span class="hero-eyebrow">HISTORY · CREATIVE STUDIO</span><h2>대본과 제작 목록 준비</h2><p class="lead">원고를 구간별로 나누고 자료 종류를 검토하세요.<br>확정한 자료는 강의 자료 작업실에서 다듬습니다.</p></div><div class="hero-art" aria-hidden="true"><div class="hero-sheet"><i></i><i></i><i></i><i></i><i></i></div><div class="hero-picture"></div></div></div>
   <ol class="workflow-path" aria-label="자료 제작 순서"><li id="workflow-input" aria-current="step"><b>01</b> 대본 입력</li><li id="workflow-review"><b>02</b> 목록 검토</li><li id="workflow-output"><b>03</b> 자료 제작</li></ol>
   <div class="card" id="material-input">
     <h3>1. 완성 대본 넣기</h3><p class="small">원고의 표현을 보존한 채 제작 구간을 나눕니다. 제목을 첫 줄에 넣어 주세요.</p>
@@ -178,13 +178,16 @@ table.places input{ width:100%; padding:4px 6px; }
   <p id="material-status" class="status" role="status" aria-live="polite"></p>
 </section>
 
-<section class="tab" id="tab-teaching">
-  <h2>강의 자료 작업실</h2><p class="lead">자료 한 장을 원본 · 강조 · 확대 화면으로. 출처와 설명 문구까지 함께 준비합니다.</p>
+<section class="tab on" id="tab-teaching">
+  <div class="teaching-home-header"><div><span class="hero-eyebrow">사관 스튜디오 · 메인 작업실</span><h2>강의 자료 작업실</h2><p class="lead">사진 · 삽화 · 지도 · 인용문을 원고 순서대로 준비하고<br>강조와 확대를 더해 강의용 PNG로 저장하세요.</p></div><div class="row"><button class="btn" data-go="materials">대본·제작 목록</button><button class="btn" data-go="board">판서 자료</button></div></div>
+  <ol class="workflow-path teaching-path" aria-label="강의 자료 작업 순서"><li id="teaching-step-plan"><b>01</b> 대본 준비</li><li id="teaching-step-make"><b>02</b> 자료 만들기</li><li id="teaching-step-refine"><b>03</b> 강조·확대</li><li id="teaching-step-export"><b>04</b> PNG 저장</li></ol>
+  <div class="card teaching-overview"><div><strong id="teaching-project-status"></strong><p id="teaching-next-hint" class="small"></p></div><button class="btn primary" id="teaching-next-action">작업 시작</button></div>
   <details class="card teaching-guide"><summary>수달쌤 채널에서 가져온 제작 방식</summary><p class="small">공개 영상 10편의 대표 장면에서 확인한 구성을 반영했습니다. 왼쪽의 큰 사진·유물·지도·인용문, 오른쪽 강사, 아래 설명 문구를 배치합니다. 영상 전체를 자동 분석한 기능은 아닙니다.</p><ul><li>실물·유물 사진은 출처와 이용 조건을 기록합니다.</li><li>설명할 부분을 원·밑줄·화살표로 강조하거나 확대합니다.</li><li>주제가 바뀔 때 검은 배경의 제목 카드를 사용할 수 있습니다.</li></ul></details>
-  <p id="teaching-empty" class="card">자료 제작에서 대본의 제작 목록을 확정하면 시작할 수 있습니다. <button class="btn" data-go="materials">자료 제작으로</button></p>
+  <div id="teaching-empty" class="card teaching-start"><h3>먼저, 완성한 대본을 넣어 주세요.</h3><p class="small">대본을 구간별로 나누고 어떤 자료가 필요한지 제안합니다. 목록을 직접 검토하고 확정한 뒤 제작을 시작합니다.</p><label for="teaching-script">강의·영상 대본</label><textarea id="teaching-script" placeholder="완성한 대본을 여기에 붙여 넣으세요. 원문은 그대로 보존합니다."></textarea><div class="row"><button class="btn primary" id="teaching-plan">구간별 제작 목록 제안받기</button><button class="btn" id="teaching-sample">명량대첩 예시로 살펴보기</button><button class="btn" data-go="materials">대본 파일·기존 목록 열기</button></div></div>
   <div id="teaching-work" hidden>
-    <div class="card row"><label>원고 구간 <select id="teaching-scene" aria-label="강의 자료 구간"></select></label><label><input type="checkbox" id="teaching-include"> 묶음·PPT에 포함</label><label><input type="checkbox" id="teaching-intro"> 주제 제목 카드 추가</label><button class="btn" id="teaching-pack">원본·강조·확대 PNG 묶음</button><button class="btn" id="teaching-ppt">강의 스토리 PPT</button></div>
-    <details class="card teaching-readiness"><summary id="teaching-summary"></summary><p class="muted">구간을 누르면 바로 이동합니다. 출처 확인은 직접 검토한 경우에 표시하세요. 파일 손상 여부는 미리보기와 출력 시 확인합니다.</p><div id="teaching-readiness"></div></details>
+    <div class="card row teaching-scene-bar"><button class="btn" id="teaching-prev" aria-label="이전 원고 구간">← 이전</button><label>원고 구간 <select id="teaching-scene" aria-label="강의 자료 구간"></select></label><button class="btn" id="teaching-next" aria-label="다음 원고 구간">다음 →</button><label><input type="checkbox" id="teaching-include"> 묶음·PPT에 포함</label><label><input type="checkbox" id="teaching-intro"> 주제 제목 카드 추가</label><button class="btn primary" id="teaching-pack">원본·강조·확대 PNG 묶음</button><button class="btn" id="teaching-ppt">강의 스토리 PPT</button></div>
+    <details class="card teaching-readiness" open><summary id="teaching-summary"></summary><p class="muted">구간을 누르면 바로 이동합니다. 검색·보기 조건은 저장할 구간을 바꾸지 않습니다. 저장 대상은 ‘묶음·PPT에 포함’으로 정하세요. 출처와 파일 상태는 직접 확인해 주세요.</p><div class="row teaching-filter"><label>구간 찾기 <input id="teaching-search-scenes" type="search" placeholder="제목 또는 원고 검색"></label><label>보기 <select id="teaching-filter"><option value="all">전체 구간</option><option value="needs">보완할 자료</option><option value="ready">준비된 자료</option><option value="unchecked">출처 미확인</option><option value="excluded">출력 제외</option></select></label><span id="teaching-output-count" class="small"></span></div><div id="teaching-readiness"></div></details>
+    <article class="card teaching-current"><span class="hero-eyebrow">지금 만드는 자료</span><h3 id="teaching-current-title"></h3><p id="teaching-current-script"></p><p id="teaching-current-brief" class="small"></p></article>
     <div class="teaching-workspace">
       <div class="card teaching-editor">
         <h3>자료와 출처</h3><label>자료 종류<select id="teaching-kind"></select></label>

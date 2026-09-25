@@ -46,7 +46,7 @@ This repo was started from the same author's 어전회의 (eojeon) project and f
 ```
 npm run setup     # npm install + npx playwright install chromium (needs internet)
 npm run check     # syntax of every script + index.html script list (offline, a second)
-npm test          # node tests/e2e.mjs — 80 Playwright tests (Chromium runs with a fake microphone);
+npm test          # node tests/e2e.mjs — 81 Playwright tests (Chromium runs with a fake microphone);
                   # Claude / OpenAI / Gemini / YouTube oEmbed are all mocked, so no keys or network are needed
 ```
 Codex sandboxes usually have no network while the agent runs: do `npm run setup` in the environment's setup
@@ -79,7 +79,7 @@ the app chose by wrapping `HS.download`.
 | `assets/lesson.js` | ⑨ tab: `HS.generateLessonAI` / `HS.generateLessonSimple`, `HS.worksheetHtml(teacher)` (print-ready HTML), `HS.exportQuizPptx` (question → answer slides); wires its own UI |
 | `assets/upload.js` | ⑧ tab: `HS.descriptionSuffix` (chapters + `HS.referencesText`, appended to the description and stripped when edited), `HS.srt` (from `HS.subtitleCues`, same timing as burned-in subtitles), `HS.chapters`, `HS.generateUploadAI` / `HS.uploadSimple`, `HS.drawThumbnail`; wires its own UI |
 | `assets/materials.js` | Finished-script material planning (`proposeMaterials`, `confirmMaterials`, `materialApproved`), validated subscription plan JSON round-trip, separate 1920×1080 PNG ZIP exports. `project.materials` keeps the original script, plannedScript, proposal groups, method and an approval fingerprint. Each group has id, selected, title, text (immutable excerpt), kind, count, brief, board, detail, cite, places. Approval replaces scenes/board with strict undo snapshot; scenes carry materialId/materialPlaces. Images keep IDs/candidates on reapproval and changed prompts are marked redo. Map exports use registered locations without inferred routes. |
-| `assets/materials-ui.js` | Default material workflow UI: review/edit/confirm, subscription order/import and individual PNG/PPT download actions. Outputs blocked for stale or unconfirmed plans. |
+| `assets/materials-ui.js` | Material planning workflow UI: review/edit/confirm, subscription order/import and individual PNG/PPT download actions. Outputs blocked for stale or unconfirmed plans. |
 | `content/material-sample.js` | User-provided complete Myeongnyang narration; preserved as input, not fact-checked historical claims. |
 | `assets/ui.js` | Wires tabs, inputs and buttons |
 | `assets/scene-edit.js` | `HS.editScenes(action,index,value,options)` for split-at-cursor, merge-next, move, delete. Requires a successful undo snapshot (`HS.snapshot(label,true)`); remaps thumbnail, check and quiz scene references. Split/merge reset duration and invalidate checks; recorded audio is removed only with `resetAudio` consent from the UI. Split copies continuing shots with new IDs; merge connects illustration shots, freezes SVG/procedural backgrounds as stills, and keeps first-scene kind/data/character/transition. Blocks edits during running image queue jobs and rejects concurrent stale edits. |
@@ -151,10 +151,12 @@ Drawing code sizes things by `Math.min(w, h) / 720` so the same code serves 16:9
 - `exportTeachingPack`: snapshots selected scenes and map; exports ready base, optional title, marks and crop PNGs + JSON/TXT source manifest with skipped reasons. `exportTeachingPptx`: selected scenes must all be ready, same sequence, right speaker space, editable caption, full narration/source notes. Existing storyboard exports remain available separately.
 - Reconfirming material plans preserves teaching settings for matching material IDs with unchanged narration. Changing imagery invalidates annotations by fingerprint. A stale material plan blocks exports.
 - `docs/CHANNEL_ANALYSIS.md`: observational sample of all 10 public videos, not whole-channel full-duration viewing or historical fact validation.
-- `TEST_FILTER='강의 자료:' npm test` runs the focused teaching tests. Full `npm test` still required before committing (now 80 cases).
+- `TEST_FILTER='강의 자료:' npm test` runs the focused teaching tests. Full `npm test` still required before committing (now 81 cases).
 
 - Teaching readiness is metadata-based (image decode still happens at preview/export). `checkedBasis` binds the user source confirmation to the rendered source; changed sources are unverified. Explicit missing shot selections never fall back to unrelated scene images. `tools/screens.mjs` also captures the teaching readiness UI.
 
 - Teaching preview falls back from zoom to marked on scene/source navigation if no valid crop exists; choosing a drawing tool returns to marked mode. Individual PNG filenames snapshot the scene number, heading and Korean variant before asynchronous encoding. Preview errors must not be overwritten by generic instructions.
 
 - `HS.replaceTeachingImage(scene,image)` requires an undo snapshot before replacing/removing an uploaded photo and clearing its credit. Snapshot failure or concurrent project/settings edits leave the existing photo untouched. UI uploads use a revision token so earlier reads cannot replace newer selections.
+
+- Teaching is the default main workspace. Legacy saved `materials` opens teaching; other saved tabs still resume. Empty projects accept a script in teaching, then hand off to the existing proposal/review/explicit-confirm flow. Scene navigation, original narration/brief, readiness filters/search and expected PNG count are workspace UI state; filtering never changes export selection.

@@ -113,9 +113,9 @@ const isZip = b => b[0] === 0x50 && b[1] === 0x4b;
 
 console.log('사관 스튜디오 시험');
 
-await test('처음 열면 자료 제작이 보이고 기존 소스 도구도 열린다', async () => {
+await test('처음 열면 강의 자료 작업실이 보이고 기존 소스 도구도 열린다', async () => {
   const page = await open();
-  assert.equal(page.initialTab, 'tab-materials');
+  assert.equal(page.initialTab, 'tab-teaching');
   assert.ok(await page.isVisible('#tab-source'));
   for (const t of ['script', 'video', 'story', 'map', 'board', 'chalk', 'upload', 'lesson', 'settings', 'source']) await page.click(`#tabs button[data-tab=${t}]`);
   assert.deepEqual(page.errors, []);
@@ -1493,7 +1493,7 @@ await test('강의 자료: 준비 현황·구간 이동·출처 재확인·선�
   const pg=await materialFixture(true);await pg.click('#tabs button[data-tab=teaching]');
   assert.ok(await pg.locator('#teaching-ppt').isDisabled());
   assert.match(await pg.locator('#teaching-summary').textContent(),/보완 필요/);
-  await pg.click('#teaching-summary');await pg.click('#teaching-readiness [data-scene="7"]');
+  if(!await pg.locator('#teaching-readiness').isVisible())await pg.click('#teaching-summary');await pg.click('#teaching-readiness [data-scene="7"]');
   assert.equal(await pg.locator('#teaching-scene').inputValue(),'7');
   await pg.check('#teaching-checked');
   assert.ok(await pg.evaluate(()=>HS.teachingReadiness(HS.project.scenes[7]).checked));
@@ -1532,6 +1532,22 @@ await test('강의 자료: 사진 변경 복원·저장 실패·동시 수정 �
     HS.project.scenes[0].teaching.credit='수정 중';release();let stale='';try{await changing;}catch(e){stale=e.message;}HS.snapshot=snap;
     return {cleared,image:restored.image,marks:restored.marks.length,error,kept,stale,credit:restored.credit};
   });assert.ok(r.cleared&&r.kept);assert.equal(r.image,'old photo');assert.equal(r.marks,1);assert.match(r.error,/저장 실패/);assert.match(r.stale,/저장 중 자료/);assert.equal(r.credit,'수정 중');await pg.context().close();
+});
+
+await test('강의 자료: 메인 대본 시작·구간 탐색·검색·출력 요약',async()=>{
+  const pg=await open();await pg.click('#tabs button[data-tab=teaching]');
+  await pg.fill('#teaching-script',await pg.evaluate(()=>MATERIAL_SAMPLE));
+  await pg.click('#teaching-plan');assert.ok(await pg.locator('#tab-materials').isVisible());
+  assert.match(await pg.locator('#material-script').inputValue(),/오늘은/);assert.ok(await pg.locator('#material-review').isVisible());
+  assert.equal(await pg.evaluate(()=>HS.project.scenes.length),0);
+  await pg.click('#material-confirm');await pg.waitForFunction(()=>HS.materialApproved());await pg.click('#tabs button[data-tab=teaching]');
+  assert.match(await pg.locator('#teaching-current-script').textContent(),/오늘은/);
+  assert.ok(await pg.locator('#teaching-prev').isDisabled());await pg.click('#teaching-next');assert.equal(await pg.locator('#teaching-scene').inputValue(),'1');await pg.click('#teaching-prev');
+  await pg.selectOption('#teaching-filter','needs');assert.ok(await pg.locator('#teaching-readiness button').count()>0);
+  await pg.fill('#teaching-search-scenes','절대로없는문구');assert.equal(await pg.locator('#teaching-readiness button').count(),0);assert.match(await pg.locator('#teaching-readiness').textContent(),/조건에 맞는/);
+  await pg.fill('#teaching-search-scenes','');await pg.selectOption('#teaching-filter','all');assert.match(await pg.locator('#teaching-output-count').textContent(),/PNG/);
+  await pg.setViewportSize({width:390,height:844});assert.ok(await pg.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+  await pg.click('#tabs button[data-tab=materials]');await pg.reload();await pg.waitForSelector('body[data-ready]');assert.ok(await pg.locator('#tab-teaching').isVisible());await pg.context().close();
 });
 
 await browser.close();

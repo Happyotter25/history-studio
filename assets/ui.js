@@ -2,7 +2,7 @@
 (function(){
   'use strict';
   var HS = window.HS, $ = HS.$, P = function(){ return HS.project; };
-  var current = 'materials';
+  var current = 'teaching';
 
   function status(id, msg, err){ var el = $(id); if(!el) return; el.textContent = msg || ''; el.classList.toggle('err', !!err); }
   function aiOn(){ return !!HS.CFG.key; }
@@ -884,9 +884,10 @@
   HS.ready.then(function(){
     $('proj-title').value = P().title || '';
     drawProjects();
-    var startTab = 'materials';
-    try{ startTab = localStorage.getItem('hs.tab') || 'materials'; }catch(e){}
-    show(document.getElementById('tab-' + startTab) ? startTab : 'materials');
+    var startTab='teaching';
+    try{startTab=localStorage.getItem('hs.tab')||'teaching';}catch(e){}
+    if(startTab==='materials')startTab='teaching';
+    show(document.getElementById('tab-'+startTab)?startTab:'teaching');
     document.body.setAttribute('data-ready', '1');
   });
   // 웹 글꼴이 늦게 오면 캔버스를 다시 그립니다
