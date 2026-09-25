@@ -40,7 +40,7 @@
 
   function palace(ctx, w, h, color){
     // 기와지붕 실루엣 (근정전 풍)
-    var cx = w * 0.5, by = h * 0.72, u = w / 1280;
+    var cx = w * 0.5, by = h * 0.72, u = Math.min(w, h) / 720;
     ctx.fillStyle = color;
     ctx.fillRect(cx - 360 * u, by, 720 * u, h - by);
     ctx.fillRect(cx - 250 * u, by - 110 * u, 500 * u, 110 * u);
@@ -60,7 +60,7 @@
   function ships(ctx, w, h, color, t, r){
     ctx.fillStyle = color;
     for(var i = 0; i < 4; i++){
-      var x = ((r() * w + t * 12 * (i % 2 ? 1 : -0.6)) % (w + 200)) - 100, y = h * (0.66 + r() * 0.1), s = (0.6 + r() * 0.6) * w / 1280;
+      var x = ((r() * w + t * 12 * (i % 2 ? 1 : -0.6)) % (w + 200)) - 100, y = h * (0.66 + r() * 0.1), s = (0.6 + r() * 0.6) * Math.min(w, h) / 720;
       ctx.beginPath(); ctx.moveTo(x - 70 * s, y); ctx.lineTo(x + 70 * s, y); ctx.lineTo(x + 50 * s, y + 22 * s); ctx.lineTo(x - 50 * s, y + 22 * s); ctx.fill();
       ctx.fillRect(x - 3 * s, y - 80 * s, 6 * s, 80 * s);
       ctx.beginPath(); ctx.moveTo(x, y - 76 * s); ctx.lineTo(x + 40 * s, y - 40 * s); ctx.lineTo(x, y - 12 * s); ctx.fill();
@@ -68,7 +68,7 @@
   }
 
   function waves(ctx, w, h, t, color){
-    ctx.strokeStyle = color; ctx.lineWidth = 2 * w / 1280; ctx.globalAlpha = 0.5;
+    ctx.strokeStyle = color; ctx.lineWidth = 2 * Math.min(w, h) / 720; ctx.globalAlpha = 0.5;
     for(var row = 0; row < 7; row++){
       var y = h * 0.74 + row * h * 0.04;
       ctx.beginPath();
@@ -88,7 +88,7 @@
       if(kind === 'snow'){ y = (r() * h + t * 40 * sp) % h; x = x0 + Math.sin(t + i) * 10; ctx.fillStyle = 'rgba(255,255,255,.85)'; }
       else if(kind === 'war'){ y = h - ((r() * h + t * 60 * sp) % h); x = x0 + Math.sin(t * 2 + i) * 8; ctx.fillStyle = 'rgba(255,' + (120 + Math.floor(r() * 80)) + ',60,.8)'; }
       else { y = (r() * h * 0.6); x = x0; ctx.fillStyle = 'rgba(255,255,230,' + (0.3 + 0.5 * Math.abs(Math.sin(t * sp + i))) + ')'; }
-      ctx.beginPath(); ctx.arc(x, y, (kind === 'snow' ? 2.2 : 1.6) * sp * w / 1280, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(x, y, (kind === 'snow' ? 2.2 : 1.6) * sp * Math.min(w, h) / 720, 0, Math.PI * 2); ctx.fill();
     }
   }
 
@@ -125,7 +125,7 @@
         ctx.beginPath(); ctx.arc(sx + Math.sin(t + i) * 20, h * 0.7 - rise, 60 + rise * 0.4, 0, Math.PI * 2); ctx.fill();
       }
       for(var f = 0; f < 6; f++){
-        var fx = w * (0.1 + f * 0.15) + r() * 40, fy = h * (0.72 + r() * 0.05), u = w / 1280;
+        var fx = w * (0.1 + f * 0.15) + r() * 40, fy = h * (0.72 + r() * 0.05), u = Math.min(w, h) / 720;
         ctx.fillStyle = '#1d100d'; ctx.fillRect(fx, fy - 110 * u, 4 * u, 110 * u);
         ctx.fillStyle = f % 2 ? '#b8322a' : '#e8d8a8';
         ctx.beginPath(); ctx.moveTo(fx + 4 * u, fy - 110 * u);

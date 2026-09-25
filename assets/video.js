@@ -68,20 +68,23 @@
       ctx.restore();
     }
     // 가장자리 어둡게
-    var v = ctx.createRadialGradient(w / 2, h / 2, h * 0.35, w / 2, h / 2, w * 0.7);
+    var v = ctx.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.35, w / 2, h / 2, Math.hypot(w, h) * 0.6);
     v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, 'rgba(0,0,0,.45)');
     ctx.fillStyle = v; ctx.fillRect(0, 0, w, h);
   }
 
   // 자막 덩어리: 문장을 화면 폭에 맞춰 두 줄 이하로 나눕니다 (화면 자막과 SRT 가 같은 기준을 씁니다)
   var measure = null;
-  function subFont(ctx, h){ ctx.font = 'bold ' + Math.round(34 * h / 720) + 'px ' + "'Noto Sans KR',sans-serif"; }
+  // 화면 크기: 가로 16:9 (1280×720) 또는 세로 9:16 쇼츠 (720×1280)
+  HS.frameSize = function(){ return HS.project.aspect === '9:16' ? [720, 1280] : [1280, 720]; };
+  function subFont(ctx, w, h){ ctx.font = 'bold ' + Math.round(34 * Math.min(w, h) / 720) + 'px ' + "'Noto Sans KR',sans-serif"; }
   function chunksOf(text){
     if(!measure){ measure = document.createElement('canvas').getContext('2d'); }
-    subFont(measure, 720);
+    var fs = HS.frameSize();
+    subFont(measure, fs[0], fs[1]);
     var sents = text.match(/[^.!?。]+[.!?。]?\s*/g) || [text], chunks = [];
     sents.forEach(function(se){
-      var lines = HS.wrap(measure, se.trim(), 1280 * 0.8);
+      var lines = HS.wrap(measure, se.trim(), fs[0] * (fs[0] < fs[1] ? 0.86 : 0.8));
       for(var i = 0; i < lines.length; i += 2) chunks.push(lines.slice(i, i + 2));
     });
     return chunks;
@@ -107,8 +110,11 @@
     var cues = sceneCues(s, seg); if(!cues.length) return;
     var cur = cues[cues.length - 1];
     for(var j = 0; j < cues.length; j++) if(t < cues[j].end){ cur = cues[j]; break; }
-    var u = h / 720, size = Math.round(34 * u), lh = size * 1.35, y0 = h - 60 * u - lh * (cur.lines.length - 1);
-    subFont(ctx, h);
+    // 자막 크기는 캔버스 크기에 비례 (미리보기·녹화·다른 크기 캔버스 모두 같은 모양)
+    var u = Math.min(w, h) / 720, size = Math.round(34 * u), lh = size * 1.35;
+    var bottom = w < h ? h * 0.74 : h - 60 * u; // 쇼츠는 아래쪽을 앱 단추가 가리므로 조금 위로
+    var y0 = bottom - lh * (cur.lines.length - 1);
+    subFont(ctx, w, h);
     cur.lines.forEach(function(line, i){
       var tw = ctx.measureText(line).width, x = (w - tw) / 2, y = y0 + i * lh;
       ctx.fillStyle = 'rgba(0,0,0,.55)'; ctx.fillRect(x - 14 * u, y - size, tw + 28 * u, size * 1.3);
@@ -117,13 +123,61 @@
   }
 
   function titleCard(ctx, w, h, s, local){
-    var u = h / 720, a = Math.min(1, 0.35 + local / 1.2);
+    var u = Math.min(w, h) / 720, a = Math.min(1, 0.35 + local / 1.2), size = 78 * u;
     ctx.globalAlpha = a;
-    ctx.fillStyle = 'rgba(0,0,0,.35)'; ctx.fillRect(0, h * 0.36, w, h * 0.26);
-    ctx.font = '800 ' + Math.round(78 * u) + "px 'Nanum Myeongjo',serif";
-    var tw = ctx.measureText(s.heading).width;
-    ctx.fillStyle = '#fff8e8'; ctx.fillText(s.heading, (w - tw) / 2, h * 0.52);
+    ctx.font = '800 ' + Math.round(size) + "px 'Nanum Myeongjo',serif";
+    // 폭에 넘치면 두 줄로, 그래도 넘치면 글씨를 줄입니다
+    var lines = HS.wrap(ctx, s.heading, w * 0.86).slice(0, 3);
+    var widest = Math.max.apply(null, lines.map(function(l){ return ctx.measureText(l).width; }));
+    if(widest > w * 0.9){ size *= w * 0.9 / widest; ctx.font = '800 ' + Math.round(size) + "px 'Nanum Myeongjo',serif"; }
+    var lh = size * 1.25, top = h * 0.5 - lh * lines.length / 2;
+    ctx.fillStyle = 'rgba(0,0,0,.35)'; ctx.fillRect(0, top - lh * 0.4, w, lh * (lines.length + 0.5));
+    ctx.fillStyle = '#fff8e8';
+    lines.forEach(function(l, i){ ctx.fillText(l, (w - ctx.measureText(l).width) / 2, top + lh * (i + 0.75)); });
     ctx.globalAlpha = 1;
+  }
+
+  // 연도·장소 이름표: 장면이 밝아진 뒤 왼쪽에서 밀려 들어오고, 장면 끝에 사라집니다
+  function caption(ctx, w, h, text, local, dur){
+    if(!text) return;
+    var u = Math.min(w, h) / 720, a = Math.min(1, Math.max(0, (local - 0.6) / 0.4), Math.max(0, (dur - 0.9 - local) / 0.4));
+    if(a <= 0) return;
+    ctx.save();
+    ctx.font = 'bold ' + Math.round(30 * u) + "px 'Noto Sans KR',sans-serif";
+    var tw = ctx.measureText(text).width, bw = tw + 44 * u, bh = 54 * u;
+    var x = 36 * u - (1 - a) * (bw + 40 * u), y = w < h ? h * 0.1 : 36 * u;
+    ctx.globalAlpha = a;
+    ctx.fillStyle = 'rgba(20,14,10,.78)'; ctx.fillRect(x, y, bw, bh);
+    ctx.fillStyle = '#c0392b'; ctx.fillRect(x, y, 7 * u, bh);
+    ctx.fillStyle = '#fff4dc'; ctx.fillText(text, x + 24 * u, y + bh * 0.68);
+    ctx.restore();
+  }
+
+  // 장면 전환: fade(겹침) · ink(먹 번짐) · wipe(붓으로 쓸기) · cut(바로)
+  var layerCanvas = null;
+  function transitionMask(mc, w, h, kind, prog, seed){
+    mc.save();
+    mc.globalCompositeOperation = 'destination-in';
+    mc.fillStyle = '#000';
+    mc.beginPath();
+    if(kind === 'ink'){
+      // 먹물 방울 몇 개가 번져 화면을 덮습니다
+      var r = HS.rng(seed), R = Math.hypot(w, h);
+      for(var i = 0; i < 7; i++){
+        var cx = r() * w, cy = r() * h, grow = Math.max(0, prog * 1.6 - r() * 0.5);
+        var rad = R * 0.55 * grow * grow;
+        mc.moveTo(cx + rad, cy);
+        for(var k = 1; k <= 24; k++){ // 가장자리를 울퉁불퉁하게
+          var ang = k / 24 * Math.PI * 2, wob = 1 + 0.12 * Math.sin(ang * 5 + i);
+          mc.lineTo(cx + Math.cos(ang) * rad * wob, cy + Math.sin(ang) * rad * wob);
+        }
+      }
+    } else { // wipe: 붓 자국처럼 비스듬한 가장자리
+      var edge = prog * (w + h * 0.4);
+      mc.moveTo(0, 0); mc.lineTo(edge, 0); mc.lineTo(edge - h * 0.4, h); mc.lineTo(0, h);
+    }
+    mc.fill();
+    mc.restore();
   }
 
   // 시각 t 의 한 장면(겹침 포함)을 그립니다
@@ -133,15 +187,26 @@
     ctx.fillStyle = '#000'; ctx.fillRect(0, 0, w, h);
     if(!tl.length) return;
     tl.forEach(function(seg){
-      var local = t - seg.start;
+      var local = t - seg.start, s = scenes[seg.i];
       if(local < 0 || local > seg.dur) return;
-      var alpha = seg.i === 0 ? 1 : Math.min(1, local / FADE);
-      ctx.save(); ctx.globalAlpha = alpha;
-      drawSceneFrame(ctx, w, h, scenes[seg.i], local / seg.dur, local);
-      ctx.restore();
-      if(alpha >= 1 || seg.i === 0){
-        if(seg.i === 0 && HS.project.scenes.length > 1) titleCard(ctx, w, h, scenes[0], local);
-        if(opts.subs !== false && !(seg.i === 0 && scenes.length > 1)) subtitle(ctx, w, h, scenes[seg.i], seg, t);
+      var kind = seg.i === 0 ? 'cut' : (s.transition || 'fade'), prog = Math.min(1, local / FADE);
+      if(kind === 'cut' || prog >= 1){
+        drawSceneFrame(ctx, w, h, s, local / seg.dur, local);
+      } else if(kind === 'fade'){
+        ctx.save(); ctx.globalAlpha = prog; drawSceneFrame(ctx, w, h, s, local / seg.dur, local); ctx.restore();
+      } else {
+        if(!layerCanvas) layerCanvas = document.createElement('canvas');
+        if(layerCanvas.width !== w || layerCanvas.height !== h){ layerCanvas.width = w; layerCanvas.height = h; }
+        var lc = layerCanvas.getContext('2d');
+        lc.clearRect(0, 0, w, h);
+        drawSceneFrame(lc, w, h, s, local / seg.dur, local);
+        transitionMask(lc, w, h, kind, prog, s.heading || seg.i);
+        ctx.drawImage(layerCanvas, 0, 0);
+      }
+      if(prog >= 1 || seg.i === 0){
+        if(seg.i === 0 && scenes.length > 1) titleCard(ctx, w, h, scenes[0], local);
+        else caption(ctx, w, h, s.caption, local, seg.dur);
+        if(opts.subs !== false && !(seg.i === 0 && scenes.length > 1)) subtitle(ctx, w, h, s, seg, t);
       }
     });
   };

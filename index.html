@@ -66,6 +66,10 @@ canvas{ max-width:100%; height:auto; display:block; border-radius:8px; backgroun
 table.places{ width:100%; border-collapse:collapse; font-size:14px; }
 table.places td,table.places th{ border-bottom:1px solid var(--line); padding:4px; text-align:left; }
 table.places input{ width:100%; padding:4px 6px; }
+#video-canvas.portrait{ max-height:70vh; width:auto; margin:0 auto; }
+.timeline{ display:flex; height:34px; margin-top:6px; border-radius:6px; overflow:hidden; border:1px solid var(--line); cursor:pointer; }
+.timeline div{ flex:none; min-width:0; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; font-size:11px; line-height:34px; padding:0 4px; color:#fff; border-right:1px solid rgba(255,255,255,.35); }
+.timeline div.on{ outline:3px solid var(--accent); outline-offset:-3px; }
 .check{ border-left:4px solid var(--line); padding:6px 10px; margin:6px 0; background:var(--bg); border-radius:6px; font-size:14px; }
 .check.wrong{ border-color:#c0392b; } .check.unsupported{ border-color:#d68910; } .check.debated{ border-color:#7d6bb3; } .check.ok{ border-color:#3c8d5a; }
 .check q{ display:block; color:var(--muted); font-size:13px; margin-top:2px; }
@@ -80,6 +84,7 @@ table.places input{ width:100%; padding:4px 6px; }
 <body>
 <header>
   <h1>사관 스튜디오<small>역사 유튜브 제작 도구</small></h1>
+  <select id="proj-select" aria-label="프로젝트 고르기" style="max-width:180px"></select>
   <input id="proj-title" type="text" placeholder="프로젝트 제목" aria-label="프로젝트 제목">
   <button class="btn" id="btn-undo" title="AI가 덮어쓰기 전 상태로 되돌립니다" style="padding:4px 10px">↶ 되돌리기</button>
   <span id="ai-badge" class="pill">AI 꺼짐</span>
@@ -93,6 +98,7 @@ table.places input{ width:100%; padding:4px 6px; }
   <button data-tab="board">⑥ 판서 PPT</button>
   <button data-tab="chalk">⑦ 손그림 → 판서</button>
   <button data-tab="upload">⑧ 업로드 준비</button>
+  <button data-tab="lesson">⑨ 수업 자료</button>
   <button data-tab="settings">설정</button>
 </nav>
 <main>
@@ -133,6 +139,7 @@ table.places input{ width:100%; padding:4px 6px; }
     <button data-go="board"><b>⑥ 판서 PPT</b><span>칠판에 분필로 쓴 듯한 요약 슬라이드</span></button>
     <button data-go="chalk"><b>⑦ 손그림 → 판서</b><span>종이에 그린 캐릭터를 칠판 그림으로</span></button>
     <button data-go="upload"><b>⑧ 업로드 준비</b><span>자막 파일, 챕터, 제목·설명·태그, 썸네일</span></button>
+    <button data-go="lesson"><b>⑨ 수업 자료</b><span>영상과 짝을 이루는 퀴즈·학습지·퀴즈 PPT</span></button>
   </div>
 </section>
 
@@ -155,7 +162,11 @@ table.places input{ width:100%; padding:4px 6px; }
   <p class="lead">장면마다 그림을 넣으면 천천히 확대·이동(켄 번스 효과)하며 자막이 흐르는 영상이 됩니다. 그림이 없는 장면은 분위기에 맞는 배경을 그려 넣습니다.</p>
   <div class="grid2">
     <div class="card">
+      <div class="row" style="margin-bottom:8px">
+        <label class="inline">화면 <select id="vid-aspect"><option value="16:9">가로 16:9 (일반 영상)</option><option value="9:16">세로 9:16 (쇼츠)</option></select></label>
+      </div>
       <canvas id="video-canvas" width="1280" height="720"></canvas>
+      <div id="vid-timeline" class="timeline" title="누르면 그 장면으로 갑니다"></div>
       <input type="range" id="vid-seek" min="0" max="1" step="0.1" value="0" style="width:100%;margin-top:6px" aria-label="영상 위치">
       <div class="row" style="margin-top:8px">
         <button class="btn" id="vid-play">재생</button>
@@ -311,6 +322,23 @@ table.places input{ width:100%; padding:4px 6px; }
   </div>
 </section>
 
+<section class="tab" id="tab-lesson">
+  <h2>수업 자료</h2>
+  <p class="lead">영상으로 수업할 때 쓸 학습지(학습 목표, 빈칸 요약, 확인 문제, 모둠 활동, 토론 질문)와 퀴즈 PPT를 만듭니다.</p>
+  <div class="card">
+    <div class="row">
+      <button class="btn primary" id="lesson-generate">수업 자료 만들기</button>
+      <button class="btn" id="lesson-dl" hidden>학습지 받기(학생용)</button>
+      <button class="btn" id="lesson-dl-t" hidden>학습지 받기(교사용)</button>
+      <button class="btn" id="lesson-quiz" hidden>퀴즈 PPT 받기</button>
+      <label class="inline"><input type="checkbox" id="lesson-teacher"> 미리보기에 답 보이기</label>
+      <span class="status" id="lesson-status"></span>
+    </div>
+    <p class="small">학습지는 HTML 파일입니다. 브라우저로 열어 인쇄(Ctrl+P)하거나 PDF로 저장하세요. 퀴즈 PPT는 문제 다음 장에 정답과 해설이 나옵니다.</p>
+  </div>
+  <div id="lesson-view"></div>
+</section>
+
 <section class="tab" id="tab-settings">
   <h2>설정</h2>
   <div class="card">
@@ -329,11 +357,14 @@ table.places input{ width:100%; padding:4px 6px; }
     <div id="undo-list"></div>
   </div>
   <div class="card">
-    <p><b>프로젝트</b></p>
+    <p><b>프로젝트</b> <span class="small">영상마다 프로젝트를 하나씩 만드세요. 오른쪽 위 목록에서 바꿔 가며 작업할 수 있습니다.</span></p>
+    <div id="proj-list" style="margin-bottom:10px"></div>
     <div class="row">
-      <button class="btn" id="proj-export">프로젝트 백업(.json)</button>
-      <label class="btn">백업 불러오기<input type="file" id="proj-import" accept=".json,application/json" hidden></label>
-      <button class="btn" id="proj-new">새 프로젝트</button>
+      <button class="btn primary" id="proj-new">새 프로젝트</button>
+      <button class="btn" id="proj-dup">지금 프로젝트 복제</button>
+      <button class="btn" id="proj-del">지금 프로젝트 지우기</button>
+      <button class="btn" id="proj-export">백업(.json) 받기</button>
+      <label class="btn">백업 불러오기(새 프로젝트로)<input type="file" id="proj-import" accept=".json,application/json" hidden></label>
       <span class="status" id="proj-status"></span>
     </div>
   </div>
@@ -355,6 +386,7 @@ table.places input{ width:100%; padding:4px 6px; }
 <script src="assets/chalk.js"></script>
 <script src="assets/export.js"></script>
 <script src="assets/upload.js"></script>
+<script src="assets/lesson.js"></script>
 <script src="assets/ui.js"></script>
 </body>
 </html>

@@ -58,7 +58,7 @@
       });
     });
     ctx.fillStyle = st.land; ctx.fill();
-    ctx.strokeStyle = st.edge; ctx.lineWidth = 1.6 * w / 1280; ctx.stroke();
+    ctx.strokeStyle = st.edge; ctx.lineWidth = 1.6 * Math.min(w, h) / 720; ctx.stroke();
   }
 
   function arrowPath(ctx, a, b, bend, prog){
@@ -76,7 +76,7 @@
 
   HS.drawMap = function(ctx, w, h, map, opt){
     opt = opt || {};
-    var st = STYLE[opt.style] || STYLE.old, u = w / 1280;
+    var st = STYLE[opt.style] || STYLE.old, u = Math.min(w, h) / 720;
     var view = HS.mapView(map, w, h), P = projector(view, w, h);
     var prog = opt.progress == null ? 1 : opt.progress;
     if(opt.style === 'board') HS.drawBoardBg(ctx, w, h, 'board', 'map');

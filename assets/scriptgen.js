@@ -7,6 +7,7 @@
   var HS = window.HS;
   var MOODS = ['dawn', 'day', 'dusk', 'night', 'war', 'sea', 'court', 'snow'];
   var MOTIONS = ['zoomIn', 'zoomOut', 'panLeft', 'panRight'];
+  var TRANSITIONS = ['fade', 'ink', 'wipe', 'cut'];
 
   var SCHEMA = {
     type: 'object', additionalProperties: false,
@@ -15,7 +16,7 @@
       title: { type: 'string' },
       scenes: { type: 'array', items: {
         type: 'object', additionalProperties: false,
-        required: ['heading', 'narration', 'visual', 'prompt', 'mood', 'motion', 'use_map'],
+        required: ['heading', 'narration', 'visual', 'prompt', 'mood', 'motion', 'use_map', 'caption', 'transition'],
         properties: {
           heading: { type: 'string' },
           narration: { type: 'string' },
@@ -23,7 +24,9 @@
           prompt: { type: 'string' },
           mood: { type: 'string', enum: MOODS },
           motion: { type: 'string', enum: MOTIONS },
-          use_map: { type: 'boolean' }
+          use_map: { type: 'boolean' },
+          caption: { type: 'string' },
+          transition: { type: 'string', enum: TRANSITIONS }
         } } },
       board: { type: 'array', items: {
         type: 'object', additionalProperties: false,
@@ -68,6 +71,8 @@
       '  - prompt: 이미지 생성 도구에 넣을 영어 프롬프트. 시대 고증(복식, 건축, 무기)을 구체적으로, 스타일은 "Korean history webtoon illustration, soft painterly" 로 통일하고, 글자나 워터마크를 넣지 말라고 적는다.',
       '  - mood: ' + MOODS.join('|') + ' 가운데 하나.',
       '  - motion: 카메라 움직임 ' + MOTIONS.join('|') + ' 가운데 하나. 이웃 장면끼리 겹치지 않게.',
+      '  - caption: 화면 왼쪽 위에 띄울 짧은 이름표. "1592년 4월 · 부산"처럼 연도·장소, 또는 "이순신 (1545~1598)"처럼 처음 나오는 인물. 20자 이내, 없으면 빈 문자열.',
+      '  - transition: 앞 장면에서 넘어오는 방식 fade(부드럽게)|ink(먹 번짐, 시대·분위기가 크게 바뀔 때)|wipe(붓으로 쓸기, 장소 이동)|cut(바로, 긴박한 장면). 대부분 fade.',
       '  - use_map: 이 장면을 삽화 대신 지도(경로가 그려지는 모습)로 보여 주는 편이 좋으면 true. 전쟁의 진격로, 천도, 영토 변화 같은 장면. 영상 전체에서 1~3개.',
       '- board: 칠판 판서 슬라이드 3~6장. lines 는 칠판에 쓸 짧은 줄들이다.',
       '  줄 앞 "-" 는 들여쓰기, "*" 는 노란 분필(핵심어·연도), "!" 는 분홍 분필(주의·반전), "[ ]" 로 감싸면 네모 칸, "→" 로 인과를 잇는다. 한 장에 8줄 이하.',
@@ -107,11 +112,12 @@
     var p = HS.project;
     p.title = p.title || d.title;
     p.scenes = d.scenes.map(function(s){
-      return { heading: s.heading, narration: s.narration, visual: s.visual, prompt: s.prompt, mood: s.mood, motion: s.motion, useMap: !!s.use_map, image: null };
+      return { heading: s.heading, narration: s.narration, visual: s.visual, prompt: s.prompt, mood: s.mood, motion: s.motion, useMap: !!s.use_map, caption: s.caption || '', transition: s.transition || 'fade', image: null };
     });
     p.board = d.board.map(function(b){ return { title: b.title, text: b.lines.join('\n'), drawing: null }; });
     p.map = { title: d.map.title, view: null, places: d.map.places, routes: d.map.routes, regions: (d.map.regions || []).filter(function(r){ return r.points && r.points.length > 2; }) };
     p.checks = null;
+    if(p.options.length === 'short') p.aspect = '9:16';
     HS.changed('all');
   }
   HS.applyScriptResult = applyResult;
@@ -151,6 +157,11 @@
   }
   HS.findPlaces = findPlaces;
 
+  // 간이 이름표: 첫 연도(월까지)와 처음 나오는 지명
+  function captionOf(text){
+    var y = text.match(/\d{3,4}년(\s*\d{1,2}월)?/), pl = findPlaces(text)[0];
+    return [y && y[0], pl && pl.name].filter(Boolean).join(' · ');
+  }
   HS.generateSimple = function(){
     var p = HS.project, sents = sentences(p.source);
     if(!sents.length) throw new Error(p.sourceFiles && p.sourceFiles.length ? 'PDF·사진 소스는 AI 모드(설정에서 API 키)에서만 읽을 수 있습니다. 글로 붙여 넣으면 간이 모드로도 만들 수 있습니다' : '소스가 비어 있습니다');
@@ -165,7 +176,7 @@
         heading: headingOf(chunk[0]), narration: text,
         visual: headingOf(chunk[0]) + ' 장면을 그린 삽화',
         prompt: 'Korean history webtoon illustration, soft painterly, ' + headingOf(chunk[0]) + ', historically accurate costume and architecture, no text, no watermark',
-        mood: guessMood(text), motion: MOTIONS[scenes.length % MOTIONS.length], image: null
+        mood: guessMood(text), motion: MOTIONS[scenes.length % MOTIONS.length], caption: captionOf(text), image: null
       });
     }
     scenes.unshift({ heading: title, narration: '오늘은 ' + title + ' 이야기를 해 보겠습니다.', visual: '제목 화면', prompt: '', mood: 'dusk', motion: 'zoomIn', image: null });
@@ -189,6 +200,7 @@
     p.board = board;
     p.map = { title: title, view: null, places: places, routes: routes, regions: [] };
     p.checks = null;
+    if(p.options.length === 'short') p.aspect = '9:16';
     HS.changed('all');
   };
 

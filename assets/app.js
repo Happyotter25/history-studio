@@ -27,7 +27,9 @@
       checks: null, // 사실 확인 결과
       upload: null, // {titles, description, tags, thumbTexts, pinned}
       thumb: null,  // {scene, main, sub, color, layout}
-      bgm: null     // 배경음악 {name, data(dataURL), dur, volume, duck}
+      bgm: null,    // 배경음악 {name, data(dataURL), dur, volume, duck}
+      lesson: null, // 수업 자료 {goals, quiz, summary, activity, discussion}
+      aspect: '16:9' // 영상 화면 비율 ('16:9' | '9:16' 쇼츠)
     };
   };
   HS.project = HS.blankProject();
@@ -63,10 +65,49 @@
     if(!p.map.regions) p.map.regions = [];
     return p;
   }
+  function idbDel(k){
+    return idb().then(function(db){ return new Promise(function(ok, fail){
+      var tx = db.transaction('kv', 'readwrite'); tx.objectStore('kv').delete(k);
+      tx.oncomplete = function(){ ok(); }; tx.onerror = function(){ fail(tx.error); };
+    }); });
+  }
+  function newId(){ return 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
+
+  /* 여러 프로젝트 — 목록은 'projects', 각 프로젝트는 'project:<id>', 되돌리기 기록은 'history:<id>' */
+  var INDEX = [];
+  HS.listProjects = function(){ return INDEX.slice().sort(function(a, b){ return a.updated < b.updated ? 1 : -1; }); };
+  function indexEntry(p){
+    var e = { id: p.id, title: p.title || '제목 없음', updated: new Date().toISOString(), scenes: p.scenes.length };
+    var i = INDEX.map(function(x){ return x.id; }).indexOf(p.id);
+    if(i >= 0) INDEX[i] = e; else INDEX.push(e);
+    return idbPut('projects', INDEX).catch(function(){});
+  }
   // 시작할 때 한 번 읽습니다. 다른 파일은 HS.ready 뒤에 화면을 그립니다
-  HS.ready = idbGet('project').catch(function(){ return null; }).then(function(p){
-    if(!p){ try{ p = JSON.parse(load('hs.project', 'null')); }catch(e){ p = null; } }
-    if(p && p.version) HS.project = fill(p);
+  HS.ready = idbGet('projects').catch(function(){ return null; }).then(function(list){
+    if(list && list.length){
+      INDEX = list;
+      return idbGet('current').then(function(cur){
+        var id = INDEX.some(function(x){ return x.id === cur; }) ? cur : HS.listProjects()[0].id;
+        return idbGet('project:' + id);
+      }).then(function(p){ if(p && p.version) HS.project = fill(p); });
+    }
+    // 예전 방식(프로젝트 하나)에서 옮겨 옵니다
+    return idbGet('project').catch(function(){ return null; }).then(function(p){
+      if(!p){ try{ p = JSON.parse(load('hs.project', 'null')); }catch(e){ p = null; } }
+      HS.project = fill(p && p.version ? p : HS.blankProject());
+      if(!HS.project.id) HS.project.id = newId();
+      if(!(p && p.version)) return idbPut('current', HS.project.id).catch(function(){});
+      return idbGet('history').catch(function(){ return null; }).then(function(h){
+        return Promise.all([
+          HS.persist(),
+          h ? idbPut('history:' + HS.project.id, h) : null
+        ]).then(function(){ return Promise.all([idbDel('project'), idbDel('history')]); }).catch(function(){});
+      });
+    });
+  }).catch(function(){
+    // IndexedDB 를 못 쓰는 브라우저
+    try{ var p = JSON.parse(load('hs.project', 'null')); if(p && p.version) HS.project = fill(p); }catch(e){}
+    if(!HS.project.id) HS.project.id = newId();
   });
 
   var saveTimer = null, listeners = [];
@@ -78,9 +119,12 @@
   HS.onChange = function(fn){ listeners.push(fn); };
   HS.persist = function(){
     clearTimeout(saveTimer);
-    var snap = JSON.parse(JSON.stringify(HS.project));
-    return idbPut('project', snap).then(function(){
+    var p = HS.project;
+    if(!p.id) p.id = newId();
+    var snap = JSON.parse(JSON.stringify(p));
+    return idbPut('project:' + p.id, snap).then(function(){
       try{ localStorage.removeItem('hs.project'); }catch(e){}
+      return Promise.all([indexEntry(p), idbPut('current', p.id)]);
     }).catch(function(){
       if(!save('hs.project', JSON.stringify(snap))){
         // 그림이 많으면 저장 한도를 넘을 수 있어, 그림·목소리를 뺀 채로라도 저장합니다
@@ -91,10 +135,40 @@
       }
     });
   };
-  /* 되돌리기 — AI 가 덮어쓰기 전 등 큰 변화 앞에서 지금 상태를 사진 찍어 둡니다 (최근 10개, IndexedDB) */
+  // 다른 프로젝트로 옮겨 갑니다 (지금 것은 먼저 저장)
+  function switchTo(p){
+    return HS.persist().then(function(){
+      HS.project = fill(p);
+      return HS.persist();
+    }).then(function(){ HS.changed('all'); return HS.project; });
+  }
+  HS.openProject = function(id){
+    if(id === HS.project.id) return Promise.resolve(HS.project);
+    return idbGet('project:' + id).then(function(p){ if(!p) throw new Error('프로젝트를 찾지 못했습니다'); return switchTo(p); });
+  };
+  HS.newProject = function(){ var p = HS.blankProject(); p.id = newId(); return switchTo(p); };
+  // 백업 파일 등을 새 프로젝트로 들입니다
+  HS.addProject = function(p){ p = JSON.parse(JSON.stringify(p)); p.id = newId(); return switchTo(p); };
+  HS.duplicateProject = function(){
+    var p = JSON.parse(JSON.stringify(HS.project));
+    p.title = (p.title || '제목 없음') + ' (사본)';
+    return HS.addProject(p);
+  };
+  HS.deleteProject = function(id){
+    INDEX = INDEX.filter(function(x){ return x.id !== id; });
+    return Promise.all([idbDel('project:' + id), idbDel('history:' + id), idbPut('projects', INDEX)]).catch(function(){}).then(function(){
+      if(id !== HS.project.id) return HS.project;
+      var next = HS.listProjects()[0];
+      if(next) return idbGet('project:' + next.id).then(function(p){ HS.project = fill(p); HS.changed('all'); return HS.project; });
+      HS.project = fill(HS.blankProject()); HS.project.id = newId(); HS.changed('all');
+      return HS.persist().then(function(){ return HS.project; });
+    });
+  };
+
+  /* 되돌리기 — AI 가 덮어쓰기 전 등 큰 변화 앞에서 지금 상태를 사진 찍어 둡니다 (프로젝트마다 최근 10개) */
   var SNAP_MAX = 10;
   HS.snapshots = function(){
-    return idbGet('history').catch(function(){ return null; }).then(function(h){ return h || []; });
+    return idbGet('history:' + HS.project.id).catch(function(){ return null; }).then(function(h){ return h || []; });
   };
   HS.snapshot = function(label){
     var p = HS.project;
@@ -102,7 +176,7 @@
     var snap = { at: new Date().toISOString(), label: label, title: p.title, scenes: p.scenes.length, project: JSON.parse(JSON.stringify(p)) };
     return HS.snapshots().then(function(h){
       h.unshift(snap);
-      return idbPut('history', h.slice(0, SNAP_MAX));
+      return idbPut('history:' + p.id, h.slice(0, SNAP_MAX));
     }).catch(function(){});
   };
   HS.restoreSnapshot = function(i){
@@ -112,8 +186,11 @@
     });
   };
 
+  // 지금 프로젝트의 내용을 바꿉니다 (프로젝트 번호는 그대로)
   HS.setProject = function(p){
-    HS.project = fill(p);
+    var id = HS.project.id;
+    HS.project = fill(JSON.parse(JSON.stringify(p)));
+    HS.project.id = id;
     HS.changed('all');
   };
 

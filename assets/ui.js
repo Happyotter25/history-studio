@@ -22,9 +22,9 @@
   Array.prototype.forEach.call(document.querySelectorAll('[data-go]'), function(b){ b.addEventListener('click', function(){ show(b.dataset.go); }); });
 
   function render(tab){
-    ({ source: renderSource, script: renderScript, video: renderVideo, story: renderStory, map: renderMap, board: renderBoard, chalk: renderChalk, upload: HS.renderUpload, settings: renderSettings })[tab]();
+    ({ source: renderSource, script: renderScript, video: renderVideo, story: renderStory, map: renderMap, board: renderBoard, chalk: renderChalk, upload: HS.renderUpload, lesson: HS.renderLesson, settings: renderSettings })[tab]();
   }
-  HS.onChange(function(what){ if(what === 'all') { $('proj-title').value = P().title || ''; render(current); } });
+  HS.onChange(function(what){ if(what === 'all') { $('proj-title').value = P().title || ''; render(current); drawProjects(); } });
 
   $('proj-title').addEventListener('input', function(){ P().title = this.value; HS.changed('title'); });
 
@@ -179,8 +179,26 @@
     if(stopVoice){ stopVoice(); stopVoice = null; }
     HS.stopSpeak();
   }
+  var TRANS = { fade: '부드럽게', ink: '먹 번짐', wipe: '붓 쓸기', cut: '바로' };
+  var MOOD_COLOR = { dawn: '#b9737a', day: '#6f8f6a', dusk: '#b4614f', night: '#2c3a60', war: '#7a2e22', sea: '#3c6a7d', court: '#9b6a45', snow: '#7c8995' };
+  function fitCanvas(){
+    var fs = HS.frameSize();
+    if(vc.width !== fs[0] || vc.height !== fs[1]){ vc.width = fs[0]; vc.height = fs[1]; }
+    vc.classList.toggle('portrait', fs[0] < fs[1]);
+    $('vid-aspect').value = P().aspect === '9:16' ? '9:16' : '16:9';
+  }
+  // 장면 띠: 길이에 비례한 칸, 누르면 그 장면으로
+  function drawTimeline(){
+    var tl = HS.timeline(), total = HS.totalDuration() || 1, scenes = P().scenes;
+    $('vid-timeline').innerHTML = tl.map(function(seg){
+      var s = scenes[seg.i], w = (seg.i === tl.length - 1 ? seg.dur : seg.dur - 0.8) / total * 100;
+      var on = playT >= seg.start && playT < seg.start + seg.dur - (seg.i === tl.length - 1 ? 0 : 0.8);
+      return '<div data-t="' + (seg.start + (seg.i ? 0.9 : 0)) + '" class="' + (on ? 'on' : '') + '" style="width:' + w + '%;background:' + (s.useMap ? '#8a6a45' : MOOD_COLOR[s.mood] || '#555') + '">' + (seg.i + 1) + '. ' + HS.esc(s.heading) + '</div>';
+    }).join('');
+  }
   function renderVideo(){
     var p = P();
+    fitCanvas();
     $('vid-scenes').innerHTML = p.scenes.length ? p.scenes.map(function(s, i){
       var pic = s.useMap ? '<span class="pill">지도 장면</span>'
         : s.image ? '<img src="' + s.image + '" alt="" style="height:40px;border-radius:4px"><button class="btn" data-act="noimg">그림 빼기</button>'
@@ -193,11 +211,14 @@
         '<label class="inline"><input type="checkbox" data-act="usemap"' + (s.useMap ? ' checked' : '') + '> 지도 장면</label><span class="status" data-st></span></div>' +
         '<div class="row small" style="margin-top:6px">목소리 ' + voice + '</div>' +
         '<div class="row small" style="margin-top:6px">카메라 <select data-k="motion">' + opts(MOTIONS, s.motion) + '</select> 분위기 <select data-k="mood">' + opts(MOODS, s.mood) + '</select> ' +
+        '</div><div class="row small" style="margin-top:6px">이름표 <input type="text" data-k="caption" value="' + HS.esc(s.caption || '') + '" placeholder="예: 1592년 4월 · 부산" style="flex:1;min-width:120px">' +
+        (i ? ' 전환 <select data-k="transition">' + opts(TRANS, s.transition || 'fade') + '</select> ' : ' ') +
         (s.audio ? '<span>목소리에 맞춰 약 ' + Math.round(HS.sceneDuration(s)) + '초</span>'
           : '<label class="inline">길이 <input type="number" data-k="dur" min="1.5" max="120" step="0.5" style="width:70px" value="' + (+s.dur > 0 ? s.dur : '') + '" placeholder="' + Math.round(HS.sceneDuration(Object.assign({}, s, { dur: 0 })) - 0.8) + '">초</label>') + '</div></div>';
     }).join('') : '<p class="small">대본이 없습니다.</p>';
     renderBgm();
     $('vid-seek').max = Math.max(0.1, HS.totalDuration()); $('vid-seek').value = playT;
+    drawTimeline();
     status('vid-status', p.scenes.length ? '전체 약 ' + Math.round(HS.totalDuration()) + '초' : '');
     HS.preloadImages().then(function(){ drawVideoAt(Math.min(playT, HS.totalDuration())); });
   }
@@ -267,9 +288,16 @@
     })();
   });
   $('vid-subs').addEventListener('change', function(){ drawVideoAt(playT); });
+  $('vid-aspect').addEventListener('change', function(){
+    stopPlay(); P().aspect = this.value; HS.changed('aspect'); renderVideo();
+  });
+  $('vid-timeline').addEventListener('click', function(e){
+    var d = e.target.closest('[data-t]'); if(!d) return;
+    stopPlay(); playT = +d.dataset.t; $('vid-seek').value = playT; drawVideoAt(playT); drawTimeline();
+  });
   $('vid-seek').addEventListener('input', function(){
     stopPlay(); playT = +this.value;
-    drawVideoAt(playT);
+    drawVideoAt(playT); drawTimeline();
     status('vid-status', Math.floor(playT) + ' / ' + Math.round(HS.totalDuration()) + '초');
   });
   function renderBgm(){
@@ -305,6 +333,7 @@
         playT = (now - t0) / 1000;
         if(playT >= total){ playT = total; drawVideoAt(total); stopPlay(); return; }
         drawVideoAt(playT); $('vid-seek').value = playT;
+        if(Math.floor(playT * 2) !== Math.floor((playT - 0.017) * 2)) drawTimeline();
         status('vid-status', Math.floor(playT) + ' / ' + Math.round(total) + '초');
         playing = requestAnimationFrame(loop);
       })(performance.now());
@@ -564,6 +593,34 @@
     HS.save('hs.key', HS.CFG.key); HS.save('hs.model', HS.CFG.model); HS.save('hs.format', $('cfg-format').value);
     drawBadge(); HS.toast(HS.CFG.key ? 'AI를 켰습니다' : 'AI를 껐습니다 (간이 모드)');
   });
+  /* 프로젝트 목록 (머리의 고르기 + 설정 탭의 표) */
+  function drawProjects(){
+    var list = HS.listProjects(), cur = P().id;
+    if(!list.some(function(x){ return x.id === cur; })) list.unshift({ id: cur, title: P().title || '제목 없음', scenes: P().scenes.length, updated: '' });
+    $('proj-select').innerHTML = list.map(function(x){ return '<option value="' + x.id + '"' + (x.id === cur ? ' selected' : '') + '>' + HS.esc(x.id === cur ? (P().title || '제목 없음') : x.title) + '</option>'; }).join('') + '<option value="__new">+ 새 프로젝트</option>';
+    $('proj-list').innerHTML = list.map(function(x){
+      var d = x.updated ? new Date(x.updated) : null;
+      return '<div class="row" style="margin:3px 0"><span style="flex:1">' + (x.id === cur ? '▶ ' : '') + HS.esc(x.id === cur ? (P().title || '제목 없음') : x.title) +
+        ' <span class="small">장면 ' + x.scenes + '개' + (d ? ' · ' + (d.getMonth() + 1) + '/' + d.getDate() + ' ' + d.toTimeString().slice(0, 5) : '') + '</span></span>' +
+        (x.id === cur ? '' : '<button class="btn" data-open="' + x.id + '">열기</button>') + '</div>';
+    }).join('');
+  }
+  HS.drawProjects = drawProjects;
+  $('proj-select').addEventListener('change', function(){
+    var v = this.value;
+    stopPlay();
+    (v === '__new' ? HS.newProject() : HS.openProject(v)).then(function(){ drawProjects(); if(v === '__new') show('source'); });
+  });
+  $('proj-list').addEventListener('click', function(e){
+    var b = e.target.closest('button[data-open]'); if(!b) return;
+    HS.openProject(b.dataset.open).then(drawProjects);
+  });
+  $('proj-dup').addEventListener('click', function(){ HS.duplicateProject().then(function(){ drawProjects(); HS.toast('복제했습니다. 지금 보는 것이 사본입니다'); }); });
+  $('proj-del').addEventListener('click', function(){
+    if(!confirm('"' + (P().title || '제목 없음') + '" 프로젝트를 지울까요? 되돌릴 수 없습니다. (백업을 먼저 받아 두세요)')) return;
+    HS.deleteProject(P().id).then(function(){ drawProjects(); render(current); });
+  });
+  $('proj-title').addEventListener('change', drawProjects);
   $('cfg-format').addEventListener('change', function(){ HS.save('hs.format', this.value); });
   $('proj-export').addEventListener('click', function(){
     // 백업에는 API 키를 넣지 않습니다 (프로젝트만)
@@ -574,18 +631,18 @@
     HS.readFile(f, true).then(function(t){
       var p = JSON.parse(t);
       if(!p || !Array.isArray(p.scenes)) throw new Error('사관 스튜디오 백업 파일이 아닙니다');
-      return HS.snapshot('백업 불러오기 전').then(function(){ HS.setProject(p); status('proj-status', '불러왔습니다: ' + (p.title || '제목 없음')); });
+      return HS.addProject(p).then(function(){ status('proj-status', '새 프로젝트로 불러왔습니다: ' + (p.title || '제목 없음')); drawProjects(); });
     }).catch(function(e){ status('proj-status', e.message, true); });
   });
   $('proj-new').addEventListener('click', function(){
-    if(!confirm('지금 프로젝트를 비우고 새로 시작할까요? (지금 상태는 되돌리기 기록에 남습니다)')) return;
-    HS.snapshot('새 프로젝트 전').then(function(){ HS.setProject(HS.blankProject()); show('source'); });
+    HS.newProject().then(function(){ drawProjects(); show('source'); });
   });
 
   /* ── 시작 ───────────────────────────────────────── */
   drawBadge();
   HS.ready.then(function(){
     $('proj-title').value = P().title || '';
+    drawProjects();
     var startTab = 'source';
     try{ startTab = localStorage.getItem('hs.tab') || 'source'; }catch(e){}
     show(document.getElementById('tab-' + startTab) ? startTab : 'source');

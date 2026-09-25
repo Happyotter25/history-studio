@@ -39,7 +39,7 @@ const AI_ANSWER = {
   map: { title: '명량 해전', places: [{ name: '명량', lon: 126.31, lat: 34.57, kind: 'battle' }, { name: '한양', lon: 126.98, lat: 37.57, kind: 'capital' }], routes: [{ from: '명량', to: '한양', label: '서해 진출 저지' }],
     regions: [{ name: '조선(대략)', color: '#2f6db3', points: [[124.5, 40], [129.5, 42.5], [129.5, 35], [126.5, 34.3], [126.2, 37.5]] }] }
 };
-AI_ANSWER.scenes[1].use_map = true;
+AI_ANSWER.scenes.forEach((x, i) => { x.use_map = i === 1; x.caption = ['', '1597년 · 명량', ''][i]; x.transition = ['fade', 'ink', 'wipe'][i]; });
 // 삽화가 답: 위험한 것(스크립트, 바깥 그림, onload)을 섞어 걸러지는지 봅니다
 const SVG_ANSWER = '그림입니다.\n<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" onload="alert(1)">' +
   '<defs><linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#335"/><stop offset="1" stop-color="#e96"/></linearGradient></defs>' +
@@ -53,12 +53,18 @@ const CHECK_ANSWER = { summary: '대체로 소스와 맞으나 한 곳은 소스
   { scene: 2, claim: '물살이 빠르다', verdict: 'unsupported', note: '소스에 물살 이야기가 없습니다.', quote: '' }] };
 const UPLOAD_ANSWER = { titles: ['13척으로 이긴 명량 해전', '이순신은 왜 울돌목을 골랐나', 'b', 'c', 'd'], description: '명량 해전을 정리합니다.\n\n#한국사',
   tags: ['명량 해전', '이순신', '한국사'], thumbnail_texts: ['13척의\n기적', '울돌목'], pinned_comment: '여러분이라면 어디서 싸웠을까요?' };
+const LESSON_ANSWER = { goals: ['명량 해전의 전개를 설명할 수 있다.'],
+  quiz: [{ type: 'choice', question: '조선 수군에게 남은 배는?', choices: ['12척', '13척', '30척', '100척'], answer: '13척', explain: '대본 1장면.', scene: 1 },
+    { type: 'ox', question: '명량은 물살이 느리다.', choices: ['O', 'X'], answer: 'X', explain: '빠르다.', scene: 2 },
+    { type: 'short', question: '해전이 벌어진 해협 이름은?', choices: [], answer: '울돌목', explain: '명량.', scene: 2 }],
+  summary: '[[1597년]], 조선 수군은 [[13척]]으로 [[울돌목]]에서 싸웠다.', activity: { title: '작전 회의', steps: ['지도를 본다', '작전을 짠다'] }, discussion: ['숫자와 지형 중 무엇이 더 중요했을까?'] };
 function answerFor(body) {
   const sys = typeof body.system === 'string' ? body.system : JSON.stringify(body.system);
   if (sys.includes('삽화가')) return SVG_ANSWER;
   if (sys.includes('장면 하나만 고친다')) return REWRITE_ANSWER;
   if (sys.includes('사실 확인 담당')) return CHECK_ANSWER;
   if (sys.includes('업로드 정보')) return UPLOAD_ANSWER;
+  if (sys.includes('수업 설계자')) return LESSON_ANSWER;
   return AI_ANSWER;
 }
 
@@ -93,7 +99,7 @@ console.log('사관 스튜디오 시험');
 await test('처음 열면 오류 없이 소스 탭이 보인다', async () => {
   const page = await open();
   assert.ok(await page.isVisible('#tab-source'));
-  for (const t of ['script', 'video', 'story', 'map', 'board', 'chalk', 'upload', 'settings', 'source']) await page.click(`#tabs button[data-tab=${t}]`);
+  for (const t of ['script', 'video', 'story', 'map', 'board', 'chalk', 'upload', 'lesson', 'settings', 'source']) await page.click(`#tabs button[data-tab=${t}]`);
   assert.deepEqual(page.errors, []);
   await page.context().close();
 });
@@ -548,6 +554,113 @@ await test('배경음악: 넣으면 녹화에 소리가 들어가고, 말할 때
   assert.equal(await ai.evaluate(() => HS.project.bgm), null);
 });
 
+await test('이름표·전환: AI가 정한 값이 들어오고, 이름표와 먹 번짐이 그려진다', async () => {
+  const r = await ai.evaluate(() => {
+    const p = HS.project, tl = HS.timeline();
+    const c = document.createElement('canvas'); c.width = 640; c.height = 360; const x = c.getContext('2d');
+    // 이름표: 장면이 밝아지고 조금 뒤, 왼쪽 위에 붉은 띠
+    HS.drawVideoFrame(x, 640, 360, tl[1].start + 2, { subs: false });
+    const px = Array.from(x.getImageData(20, 30, 1, 1).data);
+    // 먹 번짐 도중에는 새 장면이 일부만 보입니다 (가운데와 구석이 서로 다른 장면)
+    p.scenes[1].useMap = false; p.scenes[1].transition = 'ink';
+    const a = []; for (const t of [tl[1].start + 0.05, tl[1].start + 0.4, tl[1].start + 0.79]) { HS.drawVideoFrame(x, 640, 360, t, { subs: false }); a.push(c.toDataURL()); }
+    p.scenes[1].useMap = true;
+    return { cap: p.scenes[1].caption, tr: p.scenes[2].transition, px, frames: new Set(a).size };
+  });
+  assert.equal(r.cap, '1597년 · 명량');
+  assert.equal(r.tr, 'wipe');
+  assert.ok(r.px[0] > 150 && r.px[1] < 90, '이름표 띠가 안 보임 ' + r.px);
+  assert.equal(r.frames, 3);
+});
+
+await test('쇼츠: 세로 9:16으로 바꾸면 캔버스·녹화가 세로가 된다', async () => {
+  await ai.click('#tabs button[data-tab=video]');
+  await ai.selectOption('#vid-aspect', '9:16');
+  const r = await ai.evaluate(async () => {
+    const c = document.getElementById('video-canvas');
+    const blob = await HS.recordCanvas(c, 1.2, t => HS.drawVideoFrame(c.getContext('2d'), c.width, c.height, t, {}));
+    const v = document.createElement('video'); v.muted = true; v.src = URL.createObjectURL(blob);
+    await new Promise(ok => { v.onloadedmetadata = ok; v.onerror = ok; });
+    return { w: c.width, h: c.height, aspect: HS.project.aspect, vw: v.videoWidth, vh: v.videoHeight };
+  });
+  assert.deepEqual([r.w, r.h, r.aspect], [720, 1280, '9:16']);
+  assert.deepEqual([r.vw, r.vh], [720, 1280]);
+  await ai.selectOption('#vid-aspect', '16:9');
+  assert.equal(await ai.evaluate(() => document.getElementById('video-canvas').width), 1280);
+});
+
+await test('타임라인 띠를 누르면 그 장면으로 간다', async () => {
+  const n = await ai.locator('#vid-timeline [data-t]').count();
+  assert.equal(n, await ai.evaluate(() => HS.project.scenes.length));
+  await ai.click('#vid-timeline [data-t]:nth-child(3)');
+  const r = await ai.evaluate(() => ({ seek: +document.getElementById('vid-seek').value, start: HS.timeline()[2].start }));
+  assert.ok(Math.abs(r.seek - (r.start + 0.9)) < 0.11, JSON.stringify(r));
+  assert.ok(await ai.locator('#vid-timeline [data-t]:nth-child(3).on').count() === 1);
+});
+
+await test('수업 자료: 학습지(학생용은 빈칸, 교사용은 답)와 퀴즈 PPT', async () => {
+  await ai.click('#tabs button[data-tab=lesson]');
+  await ai.click('#lesson-generate');
+  await ai.waitForSelector('#lesson-view iframe');
+  const stu = await ai.evaluate(() => HS.worksheetHtml(false)), tea = await ai.evaluate(() => HS.worksheetHtml(true));
+  assert.ok(!stu.includes('[[') && stu.includes('class="blank">(1)') && !stu.includes('울돌목</b>'), '학생용 빈칸');
+  assert.ok(tea.includes('<u><b>울돌목</b></u>') && tea.includes('정답: <b>13척</b>'), '교사용 답');
+  assert.ok(stu.includes('② 13척') && !stu.includes('class="ans"'));
+  const { name, buf } = await download(ai, '#lesson-dl');
+  assert.match(name, /학습지\.html$/);
+  assert.ok(buf.toString('utf8').includes('확인 문제'));
+  const q = await download(ai, '#lesson-quiz');
+  assert.match(q.name, /퀴즈\.pptx$/);
+  const slides = new Set(q.buf.toString('latin1').match(/ppt\/slides\/slide\d+\.xml/g));
+  assert.equal(slides.size, 1 + 3 * 2, '표지 + 문제·정답');
+});
+
+await test('여러 프로젝트: 새로 만들고, 바꾸고, 복제하고, 지운다', async () => {
+  const first = await ai.evaluate(() => ({ id: HS.project.id, title: HS.project.title }));
+  await ai.selectOption('#proj-select', '__new');
+  await ai.waitForFunction(id => HS.project.id !== id && HS.project.scenes.length === 0, first.id);
+  await ai.fill('#proj-title', '두 번째 영상'); await ai.locator('#proj-title').dispatchEvent('change');
+  await ai.evaluate(() => HS.persist());
+  const opts = await ai.locator('#proj-select option').allTextContents();
+  assert.ok(opts.includes(first.title) && opts.includes('두 번째 영상'), opts.join('|'));
+  await ai.selectOption('#proj-select', first.id);
+  await ai.waitForFunction(id => HS.project.id === id, first.id);
+  assert.ok(await ai.evaluate(() => HS.project.scenes.length > 0 && !!HS.project.scenes[0].svg), '첫 프로젝트 내용이 돌아오지 않음');
+  // 새로 열어도 마지막 프로젝트가 열립니다
+  await ai.reload(); await ai.waitForSelector('body[data-ready]');
+  assert.equal(await ai.evaluate(() => HS.project.id), first.id);
+  await ai.click('#tabs button[data-tab=settings]');
+  await ai.click('#proj-dup');
+  await ai.waitForFunction(t => HS.project.title === t + ' (사본)', first.title);
+  const dupId = await ai.evaluate(() => HS.project.id);
+  await ai.click('#proj-del');
+  await ai.waitForFunction(id => HS.project.id !== id, dupId);
+  const list = await ai.evaluate(() => HS.listProjects().map(x => x.title));
+  assert.ok(!list.some(t => t.endsWith('(사본)')), list.join('|'));
+  assert.equal(list.length, 2);
+});
+
+await test('예전 저장 방식(프로젝트 하나)에서 자동으로 옮겨 온다', async () => {
+  const pg = await open();
+  await pg.evaluate(() => new Promise((ok, fail) => {
+    const rq = indexedDB.open('hs', 1);
+    rq.onsuccess = () => {
+      const tx = rq.result.transaction('kv', 'readwrite'), st = tx.objectStore('kv');
+      st.delete('projects'); st.delete('current');
+      st.put({ version: 1, title: '옛 프로젝트', source: '', options: { length: 'mid', audience: '', tone: '' }, scenes: [{ heading: 'A', narration: 'a' }], board: [], map: { title: '', view: null, places: [], routes: [] } }, 'project');
+      st.put([{ at: '2026-01-01T00:00:00Z', label: '옛 기록', title: '옛 프로젝트', scenes: 1, project: {} }], 'history');
+      tx.oncomplete = ok; tx.onerror = fail;
+    };
+  }));
+  await pg.reload(); await pg.waitForSelector('body[data-ready]');
+  const r = await pg.evaluate(async () => ({ title: HS.project.title, id: HS.project.id, list: HS.listProjects().length, hist: (await HS.snapshots()).length }));
+  assert.equal(r.title, '옛 프로젝트');
+  assert.ok(r.id);
+  assert.equal(r.list, 1);
+  assert.equal(r.hist, 1);
+  await pg.context().close();
+});
+
 await test('그림·목소리가 든 프로젝트가 IndexedDB에 저장되어 다시 열어도 남는다', async () => {
   await ai.evaluate(() => HS.persist());
   await ai.reload(); await ai.waitForSelector('body[data-ready]');
@@ -558,10 +671,24 @@ await test('그림·목소리가 든 프로젝트가 IndexedDB에 저장되어 �
 });
 await ai.context().close();
 
+await test('키 없이도 연도·지명 빈칸 퀴즈를 만든다', async () => {
+  const pg = await open();
+  await pg.click('#src-sample'); await pg.click('#btn-generate');
+  const L = await pg.evaluate(() => HS.generateLessonSimple());
+  assert.ok(L.quiz.length >= 4, '문제 ' + L.quiz.length);
+  for (const q of L.quiz) {
+    assert.ok(q.choices.includes(q.answer) && new Set(q.choices).size === q.choices.length, JSON.stringify(q));
+    assert.ok(q.question.includes('______') && !q.question.includes(q.answer), q.question);
+  }
+  assert.ok(new Set(L.quiz.map(q => q.choices.indexOf(q.answer))).size > 1, '정답 자리가 늘 같음');
+  assert.ok(L.summary.includes('[['));
+  await pg.context().close();
+});
+
 await test('휴대폰 폭에서 가로로 넘치지 않는다', async () => {
   const pg = await open({ width: 375, height: 800 });
   await pg.click('#src-sample'); await pg.click('#btn-generate');
-  for (const t of ['source', 'script', 'video', 'story', 'map', 'board', 'chalk', 'upload', 'settings']) {
+  for (const t of ['source', 'script', 'video', 'story', 'map', 'board', 'chalk', 'upload', 'lesson', 'settings']) {
     await pg.click(`#tabs button[data-tab=${t}]`);
     const over = await pg.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
     assert.ok(over <= 0, t + ' 탭이 ' + over + 'px 넘침');

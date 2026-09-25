@@ -28,4 +28,11 @@ await pg.evaluate(() => { HS.uploadSimple(); HS.project.thumb = { scene: 3, main
 await pg.click('#tabs button[data-tab=upload]'); await pg.waitForTimeout(400);
 await pg.screenshot({ path: path.join(root, 'docs/upload.png') });
 await pg.locator('#thumb-canvas').screenshot({ path: path.join(root, 'docs/thumbnail.png') });
+await pg.evaluate(() => HS.generateLessonSimple());
+await pg.click('#tabs button[data-tab=lesson]'); await pg.waitForTimeout(600);
+await pg.screenshot({ path: path.join(root, 'docs/lesson.png') });
+await pg.evaluate(() => { HS.project.aspect = '9:16'; HS.changed('aspect'); });
+await pg.click('#tabs button[data-tab=video]'); await pg.waitForTimeout(300);
+await pg.evaluate(() => { const c = document.getElementById('video-canvas'), tl = HS.timeline(); HS.drawVideoFrame(c.getContext('2d'), c.width, c.height, tl[1].start + 3, {}); });
+await pg.locator('#video-canvas').screenshot({ path: path.join(root, 'docs/shorts.png') });
 await b.close();

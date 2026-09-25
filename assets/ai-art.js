@@ -88,7 +88,8 @@
       else if(motion === 'zoomOut') z = 1.06 + 0.14 * (1 - k) * d;
       else { px = (motion === 'panLeft' ? (0.5 - k) : (k - 0.5)) * w * 0.07 * d; z = 1.06 + 0.04 * d; }
       if(L.id === 'near') py = Math.sin(k * Math.PI) * h * 0.006; // 앞 가림은 살짝 흔들립니다
-      var dw = w * z, dh = h * z;
+      // 화면을 꽉 채우도록(cover) 맞춥니다 — 세로 화면에서는 그림 가운데를 잘라 씁니다
+      var base = Math.max(w / (L.img.width || 1600), h / (L.img.height || 900)), dw = (L.img.width || 1600) * base * z, dh = (L.img.height || 900) * base * z;
       ctx.drawImage(L.img, (w - dw) / 2 - px, (h - dh) / 2 + py, dw, dh);
     });
   };
