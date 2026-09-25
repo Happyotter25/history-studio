@@ -1,6 +1,6 @@
 (function(){
   'use strict';
-  var HS=window.HS,$=HS.$,selected=0,lastProject=null,busy=false,jobId='',cancelled=false,token='',previewRevision=0;
+  var HS=window.HS,$=HS.$,selected=0,lastProject=null,busy=false,jobId='',cancelled=false,token='',previewRevision=0,promptProposal=null;
   function plan(){return HS.studioDraft();}function current(){return plan().slides[selected];}
   function message(s,error){$('studio-status').textContent=s;$('studio-status').classList.toggle('err',!!error);}
   function save(){HS.changed('studio');}
@@ -22,7 +22,7 @@
     $('studio-fields').disabled=busy;$('studio-cancel').hidden=!busy||!jobId;$('studio-input').hidden=p.mode!=='input';$('studio-work').hidden=p.mode==='input';
     $('studio-script').value=p.script;$('studio-method').textContent=p.method;$('studio-return').hidden=!p.slides.length||p.script!==p.analyzedScript;
     $('studio-boundaries').hidden=p.mode!=='review';$('studio-editor').hidden=p.mode!=='compose';$('studio-confirm-plan').hidden=p.mode!=='review';$('studio-reopen-plan').hidden=p.mode!=='compose';
-    overview();if(!p.slides.length){previewRevision++;return;}var s=current();
+    renderPromptProposal();overview();if(!p.slides.length){previewRevision++;return;}var s=current();
     $('studio-source').open=p.mode==='review';$('studio-original').value=p.script.slice(s.start,s.end);$('studio-reason').textContent=s.reason;
     $('studio-scene-title').value=s.title;$('studio-type').value=s.type;$('studio-content').value=s.content;$('studio-prompt').value=s.prompt;$('studio-credit').value=s.credit;
     $('studio-content-label').hidden=s.type==='image';$('studio-image-editor').hidden=s.type!=='image';$('studio-content-help').textContent=s.type==='board'?'줄마다 판서 항목을 쓰세요. *핵심어는 노란색, !주의는 분홍색, -는 들여쓰기입니다.':'슬라이드에 보여 줄 핵심 문장을 직접 다듬어 주세요. 원고 전체는 발표자 노트에 보존됩니다.';
@@ -56,9 +56,22 @@
   $('studio-reopen-plan').onclick=function(){safe(function(){return protectedChange('장면 구분 재검토 전',function(){plan().mode='review';});});};
   $('studio-edit-script').onclick=function(){safe(function(){return protectedChange('대본 다시 입력 전',function(){plan().backMode=plan().mode;plan().mode='input';});});};
   $('studio-return').onclick=function(){if(plan().slides.length&&plan().script===plan().analyzedScript){plan().mode=plan().backMode||'review';save();HS.renderSceneStudio();}};
-  ['scene-title','content','prompt','credit'].forEach(function(k){$('studio-'+k).oninput=function(){var s=current();s[k==='scene-title'?'title':k]=this.value;s.reviewed='';save();overview();draw();};});
+  ['scene-title','content','prompt','credit'].forEach(function(k){$('studio-'+k).oninput=function(){var s=current();s[k==='scene-title'?'title':k]=this.value;s.reviewed='';save();renderPromptProposal();overview();draw();};});
   $('studio-type').onchange=function(){current().type=this.value;current().reviewed='';save();HS.renderSceneStudio();};
   function attach(s,image){if(s.image){s.candidates=s.candidates||[];s.candidates.unshift({image:s.image,prompt:s.imagePrompt});s.candidates=s.candidates.slice(0,3);}s.image=image;s.imagePrompt=s.prompt;s.reviewed='';}
+  function renderPromptProposal(){
+    var a=promptProposal,valid=a&&a.project===HS.project&&a.plan===plan()&&a.scene===current()&&a.before===JSON.stringify(current());
+    $('studio-prompt-proposal').hidden=!valid;if(valid)$('studio-proposed-prompt').value=a.text;
+  }
+  $('studio-auto-prompt').onclick=function(){job(async function(){
+    var project=HS.project,p=plan(),s=current(),before=JSON.stringify(s);HS.studioValidate(p);if(p.mode!=='compose'||s.type!=='image')throw new Error('장면 만들기에서 이미지 표현을 선택해 주세요.');promptProposal=null;
+    var result=await runCodex('prompt',JSON.stringify({title:s.title,narration:p.script.slice(s.start,s.end),purpose:s.reason,existingPrompt:s.prompt}));
+    if(cancelled||HS.project!==project||plan()!==p||current()!==s||JSON.stringify(s)!==before)throw new Error('작성 중 프로젝트나 장면이 바뀌어 제안을 적용하지 않았습니다.');
+    if(typeof result.generatedPrompt!=='string'||!result.generatedPrompt.trim()||result.generatedPrompt.length>2000)throw new Error('올바른 프롬프트를 받지 못했습니다. 앱 실행 프로그램을 다시 시작하고 시도해 주세요.');
+    promptProposal={project:project,plan:p,scene:s,before:before,text:result.generatedPrompt};message('프롬프트 제안을 확인하고 적용하세요. 기존 내용은 아직 바꾸지 않았습니다.');
+  });};
+  $('studio-apply-prompt').onclick=function(){safe(async function(){var a=promptProposal;if(!a||a.project!==HS.project||a.plan!==plan()||a.scene!==current()||a.before!==JSON.stringify(current()))throw new Error('장면 내용이 바뀌었습니다. 프롬프트를 다시 작성해 주세요.');await protectedChange('이미지 프롬프트 적용 전',function(){a.scene.prompt=a.text;a.scene.reviewed='';promptProposal=null;});message('프롬프트를 적용했습니다. 내용을 다듬은 뒤 이 장면만 생성하세요.');});};
+  $('studio-discard-prompt').onclick=function(){promptProposal=null;renderPromptProposal();};
   $('studio-generate').onclick=function(){job(async function(){var project=HS.project,p=plan(),s=current(),before=JSON.stringify(s);HS.studioValidate(p);if(p.mode!=='compose')throw new Error('장면 구분을 먼저 확정해 주세요.');if(!s.prompt.trim())throw new Error('이미지 제작 지시를 넣어 주세요.');await HS.snapshot('장면 이미지 생성 전',true);
     var result=await runCodex('image','Educational historical illustration for exactly one slide. No text or labels. Do not invent historical details as facts.\n'+JSON.stringify({scene:s.title,narration:p.script.slice(s.start,s.end),visualDescription:s.prompt}));await HS.loadImage(result.image);
     $('studio-result-link').href=result.image;$('studio-result-link').hidden=false;

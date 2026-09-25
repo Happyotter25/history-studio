@@ -100,5 +100,6 @@ await studio.screenshot({path:path.join(root,'docs/studio-review.png'),fullPage:
 await studio.click('#studio-confirm-plan');await studio.waitForFunction(()=>HS.project.studio.mode==='compose');await studio.fill('#studio-content','칠천량 패전\n조선 수군의 전력 약화');await studio.click('#studio-review-done');await studio.waitForFunction(()=>HS.project.studio.slides[0].reviewed);
 await studio.selectOption('#studio-type','board');await studio.fill('#studio-scene-title','수군 재건의 세 가지 과제');await studio.fill('#studio-content','[수군 재건]\n*흩어진 장병을 모으다\n- 군량과 함선을 확보하다\n→ 다시 싸울 준비');
 await studio.addStyleTag({content:'*{scroll-behavior:auto!important}'});await studio.evaluate(()=>window.scrollTo({top:0,behavior:'instant'}));await studio.waitForTimeout(400);await studio.screenshot({path:path.join(root,'docs/studio-compose.png'),fullPage:true});
-await (await import('node:fs/promises')).mkdir(path.join(root,'output'),{recursive:true});await studio.setViewportSize({width:390,height:844});await studio.screenshot({path:path.join(root,'output/studio-mobile.png'),fullPage:true});
+await (await import('node:fs/promises')).mkdir(path.join(root,'output'),{recursive:true});await studio.selectOption('#studio-type','image');await studio.evaluate(()=>window.scrollTo({top:0,behavior:'instant'}));await studio.screenshot({path:path.join(root,'docs/studio-prompt.png'),fullPage:true});
+await studio.setViewportSize({width:390,height:844});await studio.screenshot({path:path.join(root,'output/studio-mobile.png'),fullPage:true});
 await b.close();
