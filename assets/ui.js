@@ -31,6 +31,7 @@
   /* ── ① 소스 ─────────────────────────────────────── */
   function renderSource(){
     var p = P();
+    renderRefs();
     $('src-text').value = p.source;
     $('opt-length').value = p.options.length; $('opt-audience').value = p.options.audience; $('opt-tone').value = p.options.tone;
     $('src-files').innerHTML = (p.sourceFiles || []).map(function(f, i){
@@ -38,6 +39,56 @@
     }).join(' ');
   }
   $('src-text').addEventListener('input', function(){ P().source = this.value; HS.changed('source'); });
+
+  /* 참고 영상 */
+  function renderRefs(){
+    var rs = P().refs || [];
+    $('ref-list').innerHTML = rs.map(function(r, i){
+      var n = (r.transcript || '').length;
+      return '<div class="ref" data-i="' + i + '"><div class="row">' +
+        '<input type="text" data-k="title" value="' + HS.esc(r.title || '') + '" placeholder="영상 제목" style="flex:1;min-width:140px">' +
+        '<select data-k="role">' + opts({ fact: '사실 자료로 참고', style: '구성·말투만 참고' }, r.role || 'fact') + '</select>' +
+        '<button class="btn" data-act="del" style="padding:2px 8px">✕</button></div>' +
+        '<input type="text" data-k="url" value="' + HS.esc(r.url || '') + '" placeholder="영상 주소 (https://www.youtube.com/watch?v=…)" style="width:100%;margin-top:6px">' +
+        '<textarea data-k="transcript" placeholder="여기에 스크립트를 붙여 넣으세요" style="margin-top:6px">' + HS.esc(r.transcript || '') + '</textarea>' +
+        '<div class="row small"><span data-count>' + (n ? n.toLocaleString() + '자' : '비어 있음') + '</span><button class="btn" data-act="clean" style="padding:1px 8px">다시 정리</button></div></div>';
+    }).join('');
+  }
+  HS.renderRefs = renderRefs;
+  $('ref-add').addEventListener('click', function(){
+    (P().refs = P().refs || []).push({ id: 'r' + Date.now().toString(36), title: '', url: '', transcript: '', role: 'fact' });
+    HS.changed('refs'); renderRefs();
+    var boxes = document.querySelectorAll('#ref-list .ref'); boxes[boxes.length - 1].querySelector('[data-k=url]').focus();
+  });
+  $('ref-list').addEventListener('input', function(e){
+    var box = e.target.closest('.ref'), k = e.target.dataset.k; if(!box || !k) return;
+    var r = P().refs[+box.dataset.i]; r[k] = e.target.value; HS.changed('refs');
+    if(k === 'transcript') box.querySelector('[data-count]').textContent = r.transcript.length.toLocaleString() + '자';
+  });
+  // 붙여 넣으면 바로 정리합니다
+  $('ref-list').addEventListener('paste', function(e){
+    if(e.target.dataset.k !== 'transcript') return;
+    var ta = e.target;
+    setTimeout(function(){ ta.value = HS.cleanTranscript(ta.value); ta.dispatchEvent(new Event('input', { bubbles: true })); }, 0);
+  });
+  // 주소를 넣으면 제목을 채웁니다 (유튜브 oEmbed; 안 되면 그대로 둡니다)
+  $('ref-list').addEventListener('change', function(e){
+    var box = e.target.closest('.ref'); if(!box) return;
+    var r = P().refs[+box.dataset.i];
+    if(e.target.dataset.k === 'url' && !r.title && HS.YT_ID(r.url)){
+      fetch('https://www.youtube.com/oembed?format=json&url=' + encodeURIComponent('https://www.youtube.com/watch?v=' + HS.YT_ID(r.url)))
+        .then(function(res){ return res.ok ? res.json() : null; })
+        .then(function(j){ if(j && j.title && !r.title){ r.title = j.title; r.channel = j.author_name || ''; HS.changed('refs'); renderRefs(); } })
+        .catch(function(){});
+    }
+  });
+  $('ref-list').addEventListener('click', function(e){
+    var b = e.target.closest('button[data-act]'); if(!b) return;
+    var i = +b.closest('.ref').dataset.i, rs = P().refs;
+    if(b.dataset.act === 'del'){ if(rs[i].transcript && !confirm('이 참고 영상을 뺄까요?')) return; rs.splice(i, 1); }
+    if(b.dataset.act === 'clean') rs[i].transcript = HS.cleanTranscript(rs[i].transcript);
+    HS.changed('refs'); renderRefs();
+  });
   ['opt-length', 'opt-audience', 'opt-tone'].forEach(function(id){
     $(id).addEventListener('change', function(){ P().options[{ 'opt-length': 'length', 'opt-audience': 'audience', 'opt-tone': 'tone' }[id]] = this.value; HS.changed('options'); });
   });

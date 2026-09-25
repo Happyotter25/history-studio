@@ -20,7 +20,7 @@ This repo was started from the same author's 어전회의 (eojeon) project and f
 ## Test (run before every commit)
 ```
 npm install
-npm test          # node tests/e2e.mjs — 44 Playwright tests (Chromium runs with a fake microphone), Claude API is mocked (SSE, routed by system prompt)
+npm test          # node tests/e2e.mjs — 47 Playwright tests (Chromium runs with a fake microphone), Claude API is mocked (SSE, routed by system prompt)
 ```
 `CHROMIUM_PATH=/path/to/chromium npm test` uses a specific browser.
 Headless Chromium renames non-ASCII download names to `download`; tests read the name
@@ -31,7 +31,7 @@ the app chose by wrapping `HS.download`.
 |---|---|
 | `index.html` | Layout, all CSS, tab markup; script order matters (see bottom of file) |
 | `assets/app.js` | `window.HS` namespace: project state + multiple projects in IndexedDB (`hs` db, `kv` store: `projects` index, `current`, `project:<id>`, undo `history:<id>`; migrates the old single `project`/`history` keys; localStorage fallback), `HS.ready`, `HS.openProject/newProject/addProject/duplicateProject/deleteProject`, undo snapshots (`HS.snapshot`/`HS.restoreSnapshot`, last 10 per project), utils, `HS.callClaude` (SDK `maxRetries: 4`, `HS.cancelAI` aborts active streams, `HS.whyFail` maps status codes to Korean messages) |
-| `assets/scriptgen.js` | Source → script. `HS.generateAI` (schema `HS.SCRIPT_SCHEMA`), offline `HS.generateSimple`, `HS.rewriteScene`, `HS.factCheck`; `HS.userContent` puts attached PDFs/images first as document/image blocks with `cache_control` on the last one |
+| `assets/scriptgen.js` | Source → script. `HS.generateAI` (schema `HS.SCRIPT_SCHEMA`), offline `HS.generateSimple`, `HS.rewriteScene`, `HS.factCheck`; `HS.userContent` puts attached PDFs/images first as document/image blocks with `cache_control` on the last one, then `<source>`, then reference videos (`<reference_video>` = facts, rewritten not copied; `<style_reference>` = structure/tone only); `HS.cleanTranscript` cleans pasted YouTube transcripts; `HS.YT_ID` |
 | `assets/board.js` | Board line syntax (`HS.parseBoardLine`), chalkboard background, `HS.drawBoardSlide` (with `progress` for the writing animation), `HS.boardChars` |
 | `assets/scene-art.js` | Procedural mood backgrounds for scenes without an image (`HS.drawSceneArt`) |
 | `assets/ai-art.js` | Claude-drawn SVG illustrations in 3 layers (`far/mid/near`) for parallax; `HS.cleanSvg` sanitizes (no script/image/text/external refs) |
@@ -43,7 +43,7 @@ the app chose by wrapping `HS.download`.
 | `assets/character.js` | "My characters": `HS.makeSticker` (removes only paper connected to the border via flood fill, optional chalk/outline), `HS.addCharacter`, `HS.drawSceneCharacter` (enter, bob, bounce while speaking) |
 | `assets/package.js` | `HS.exportAll` (JSZip from the PptxGenJS bundle → one ZIP with everything), one-click pipeline `HS.runPipeline` / `HS.stopPipeline` / `HS.estimateCost` |
 | `assets/lesson.js` | ⑨ tab: `HS.generateLessonAI` / `HS.generateLessonSimple`, `HS.worksheetHtml(teacher)` (print-ready HTML), `HS.exportQuizPptx` (question → answer slides); wires its own UI |
-| `assets/upload.js` | ⑧ tab: `HS.srt` (from `HS.subtitleCues`, same timing as burned-in subtitles), `HS.chapters`, `HS.generateUploadAI` / `HS.uploadSimple`, `HS.drawThumbnail`; wires its own UI |
+| `assets/upload.js` | ⑧ tab: `HS.descriptionSuffix` (chapters + `HS.referencesText`, appended to the description and stripped when edited), `HS.srt` (from `HS.subtitleCues`, same timing as burned-in subtitles), `HS.chapters`, `HS.generateUploadAI` / `HS.uploadSimple`, `HS.drawThumbnail`; wires its own UI |
 | `assets/ui.js` | Wires tabs, inputs and buttons |
 | `content/places.js` | Gazetteer (name, aliases, lon/lat, kind) used by offline map extraction — extend freely |
 | `content/sample.js` | Sample source (임진왜란) |
@@ -55,7 +55,7 @@ the app chose by wrapping `HS.download`.
 
 ## Data model (`HS.project`, saved to IndexedDB, exported as backup JSON)
 ```
-{ version, id, title, aspect('16:9'|'9:16'), source, sourceFiles:[{name, mediaType, data(base64), size}], options:{length,audience,tone}, mapStyle,
+{ version, id, title, aspect('16:9'|'9:16'), source, sourceFiles:[{name, mediaType, data(base64), size}], refs:[{id, title, url, channel, transcript, role(fact|style)}], options:{length,audience,tone}, mapStyle,
   bgm:{name, data(dataURL), dur, volume, duck}|null,
   scenes:[{heading, narration, visual, prompt, mood, motion, useMap,
            caption, transition(fade|ink|wipe|cut), keywords[] (yellow in subtitles), character:{id, side}|null,

@@ -20,6 +20,7 @@
       title: '',
       source: '',
       sourceFiles: [], // 첨부 소스 {name, mediaType, data(base64), size}
+      refs: [],        // 참고 영상 {id, title, url, channel, transcript, role('fact'|'style')}
       options: { length: 'mid', audience: '중고등학생', tone: '친근한 설명체' },
       scenes: [],   // {heading, narration, visual, prompt, mood, motion, image, svg, audio, audioDur}
       board: [],    // {title, text, drawing, dw, dh}

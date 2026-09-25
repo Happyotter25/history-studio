@@ -15,7 +15,7 @@
   HS.uploadText = function(){
     var u = P().upload; if(!u) return '';
     return ['[제목 후보]'].concat(u.titles.map(function(t, i){ return (i + 1) + '. ' + t; }),
-      ['', '[설명]', u.description, '', HS.chaptersText(), '', '[태그]', u.tags.join(', '), '', '[고정 댓글]', u.pinned]).join('\n');
+      ['', '[설명]', u.description + HS.descriptionSuffix(), '', '[태그]', u.tags.join(', '), '', '[고정 댓글]', u.pinned]).join('\n');
   };
 
   // 모두 받기: onStep(글) 로 진행을 알립니다. noDownload 면 Blob 만 돌려줍니다

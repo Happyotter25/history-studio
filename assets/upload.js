@@ -34,6 +34,14 @@
     });
     return out;
   };
+  // 설명란 끝에 붙는 참고 자료 (참고 영상)
+  HS.referencesText = function(){
+    var rs = (P().refs || []).filter(function(r){ return r.url || r.title; });
+    if(!rs.length) return '';
+    return '📚 참고 자료\n' + rs.map(function(r){ return '- ' + (r.title || '참고 영상') + (r.channel ? ' (' + r.channel + ')' : '') + (r.url ? ' ' + r.url : ''); }).join('\n');
+  };
+  // 설명 본문 뒤에 자동으로 붙는 부분: 챕터 + 참고 자료
+  HS.descriptionSuffix = function(){ return [HS.chaptersText(), HS.referencesText()].filter(Boolean).map(function(x){ return '\n\n' + x; }).join(''); };
   HS.chaptersText = function(){ return HS.chapters().map(function(c){ return clock(c.start) + ' ' + c.title; }).join('\n'); };
 
   /* ── Claude 로 업로드 정보 짓기 ───────────────────────── */
@@ -143,7 +151,7 @@
       ? '유튜브 챕터는 3개 이상이어야 표시됩니다. 장면이 짧으면 앞 챕터에 합쳐집니다.' : '챕터 ' + ch.length + '개 · 영상 약 ' + Math.round(HS.totalDuration()) + '초 (목소리를 넣으면 시각이 바뀝니다)';
     $('up-info').innerHTML = u ? [
       '<b>제목 후보</b>' + u.titles.map(function(x){ return '<div class="row"><span style="flex:1">' + HS.esc(x) + '</span><button class="btn" data-copy="' + HS.esc(x) + '">복사</button></div>'; }).join(''),
-      '<b>설명 (챕터 포함)</b><textarea id="up-desc" style="min-height:220px">' + HS.esc(u.description + '\n\n' + HS.chaptersText()) + '</textarea><button class="btn" data-copy-el="up-desc">설명 복사</button>',
+      '<b>설명 (챕터·참고 자료 포함)</b><textarea id="up-desc" style="min-height:220px">' + HS.esc(u.description + HS.descriptionSuffix()) + '</textarea><button class="btn" data-copy-el="up-desc">설명 복사</button>',
       '<b>태그</b><textarea id="up-tags" style="min-height:60px">' + HS.esc(u.tags.join(', ')) + '</textarea><button class="btn" data-copy-el="up-tags">태그 복사</button>',
       '<b>고정 댓글</b><textarea id="up-pinned" style="min-height:60px">' + HS.esc(u.pinned) + '</textarea>'
     ].join('<div style="height:10px"></div>') : '<p class="small">아직 없습니다. 위 버튼을 누르세요.</p>';
@@ -177,7 +185,7 @@
     var u = P().upload; if(!u) return;
     if(e.target.id === 'up-tags') u.tags = e.target.value.split(',').map(function(x){ return x.trim(); }).filter(Boolean);
     if(e.target.id === 'up-pinned') u.pinned = e.target.value;
-    if(e.target.id === 'up-desc') u.description = e.target.value.replace('\n\n' + HS.chaptersText(), '');
+    if(e.target.id === 'up-desc') u.description = e.target.value.replace(HS.descriptionSuffix(), '');
     HS.changed('upload');
   });
   ['thumb-scene', 'thumb-main', 'thumb-sub', 'thumb-color', 'thumb-layout', 'thumb-character'].forEach(function(id){

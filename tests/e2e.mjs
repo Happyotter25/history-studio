@@ -767,6 +767,7 @@ await test('Claude가 붐빌 때(529) 알아서 다시 시도하고, 오류는 �
     calls++;
     if (calls === 1) return route.fulfill({ status: 529, headers: { 'content-type': 'application/json', 'access-control-allow-origin': '*', 'retry-after': '0' }, body: JSON.stringify({ type: 'error', error: { type: 'overloaded_error', message: 'Overloaded' } }) });
     const body = JSON.parse(route.request().postData());
+    aiBodies.push(body); // 뒤의 시험들도 요청 내용을 봅니다
     await route.fulfill({ status: 200, headers: { 'content-type': 'text/event-stream', 'access-control-allow-origin': '*' }, body: sse(answerFor(body)) });
   });
   await ai.evaluate(() => HS.generateUploadAI());
@@ -788,6 +789,47 @@ await test('한 번에 만들기: 대본부터 수업 자료까지 차례로 만
   assert.ok(!log.includes('AI 그림'));
   const p = await ai.evaluate(() => ({ checks: !!HS.project.checks, upload: !!HS.project.upload, lesson: !!HS.project.lesson, scenes: HS.project.scenes.length }));
   assert.deepEqual(p, { checks: true, upload: true, lesson: true, scenes: 3 });
+});
+
+// 유튜브 "스크립트 표시"에서 복사한 모양
+const YT_TRANSCRIPT = ['0:00', '[음악]', '0:03', '안녕하세요 여러분 오늘은', '0:05', '명량 해전 이야기입니다.', '3초', '1:02', '이순신은 울돌목의', '1분 5초',
+  '빠른 물살을 이용했습니다.', '0:15 >> 정말 대단하죠?', '[박수]', '1:02:03', '끝.'].join('\n');
+
+await test('참고 영상: 붙여 넣은 유튜브 스크립트를 정리하고, 주소로 제목을 채운다', async () => {
+  await ai.context().route('https://www.youtube.com/oembed**', r => r.fulfill({ status: 200, headers: { 'content-type': 'application/json', 'access-control-allow-origin': '*' }, body: JSON.stringify({ title: '명량 해전 10분 정리', author_name: '역사채널' }) }));
+  const clean = await ai.evaluate(t => HS.cleanTranscript(t), YT_TRANSCRIPT);
+  assert.equal(clean, '안녕하세요 여러분 오늘은 명량 해전 이야기입니다. 이순신은 울돌목의 빠른 물살을 이용했습니다. 정말 대단하죠? 끝.');
+  assert.equal(await ai.evaluate(() => [HS.YT_ID('https://youtu.be/abcdefghijk'), HS.YT_ID('https://www.youtube.com/watch?v=abcdefghijk&t=3'), HS.YT_ID('https://www.youtube.com/shorts/abcdefghijk'), HS.YT_ID('nope')].join()), 'abcdefghijk,abcdefghijk,abcdefghijk,');
+  await ai.click('#tabs button[data-tab=source]');
+  await ai.evaluate(() => { HS.project.refs = []; HS.changed('refs'); HS.renderRefs(); });
+  await ai.click('#ref-add');
+  await ai.fill('#ref-list .ref[data-i="0"] [data-k=url]', 'https://www.youtube.com/watch?v=abcdefghijk');
+  await ai.locator('#ref-list .ref[data-i="0"] [data-k=url]').dispatchEvent('change');
+  await ai.waitForFunction(() => HS.project.refs[0].title === '명량 해전 10분 정리');
+  await ai.fill('#ref-list .ref[data-i="0"] [data-k=transcript]', YT_TRANSCRIPT);
+  await ai.locator('#ref-list .ref[data-i="0"] [data-k=transcript]').dispatchEvent('paste');
+  await ai.waitForFunction(() => HS.project.refs[0].transcript.startsWith('안녕하세요'));
+  assert.equal(await ai.inputValue('#ref-list .ref[data-i="0"] [data-k=transcript]'), clean);
+  assert.equal(await ai.evaluate(() => HS.project.refs[0].channel), '역사채널');
+});
+
+await test('참고 영상: 사실 자료와 구성·말투 참고를 나눠 Claude에게 보내고, 설명란에 출처를 붙인다', async () => {
+  await ai.evaluate(() => { HS.project.refs.push({ id: 'r2', title: '말투 좋은 채널', url: 'https://youtu.be/zzzzzzzzzzz', transcript: '여러분, 상상해 보세요.', role: 'style' }); HS.changed('refs'); });
+  const n = aiBodies.length;
+  await ai.evaluate(() => HS.generateAI());
+  const txt = aiBodies[n].messages[0].content.filter(b => b.type === 'text').map(b => b.text).join('');
+  assert.ok(/<reference_video title="명량 해전 10분 정리">\n안녕하세요/.test(txt), '사실 자료 없음');
+  assert.ok(txt.includes('문장·표현을 그대로 옮기지 말고'), '옮기지 말라는 안내 없음');
+  assert.ok(/<style_reference title="말투 좋은 채널">\n여러분, 상상해 보세요\./.test(txt), '구성 참고 없음');
+  assert.ok(txt.indexOf('<reference_video') < txt.indexOf('<style_reference'));
+  await ai.evaluate(() => HS.uploadSimple());
+  await ai.click('#tabs button[data-tab=upload]');
+  const desc = await ai.inputValue('#up-desc');
+  assert.ok(desc.includes('📚 참고 자료\n- 명량 해전 10분 정리 (역사채널) https://www.youtube.com/watch?v=abcdefghijk\n- 말투 좋은 채널 https://youtu.be/zzzzzzzzzzz'), desc);
+  // 설명을 고쳐도 자동으로 붙는 부분은 본문에 섞이지 않습니다
+  await ai.fill('#up-desc', '고친 설명' + await ai.evaluate(() => HS.descriptionSuffix()));
+  assert.equal(await ai.evaluate(() => HS.project.upload.description), '고친 설명');
+  await ai.evaluate(() => { HS.project.refs = []; HS.changed('refs'); });
 });
 
 await test('그림·목소리가 든 프로젝트가 IndexedDB에 저장되어 다시 열어도 남는다', async () => {
@@ -837,6 +879,21 @@ await test('한 번에 만들기: 키 없이도 대본·업로드 정보·수업
   assert.ok(p.upload && p.lesson && p.n > 3, JSON.stringify(p));
   const [d] = await Promise.all([pg.waitForEvent('download'), pg.click('#pipe-zip')]);
   assert.ok(fs.statSync(await d.path()).size > 50000);
+  await pg.context().close();
+});
+
+await test('참고 영상 스크립트만 있어도 간이 방식으로 대본을 만든다', async () => {
+  const pg = await open();
+  await pg.evaluate(() => {
+    HS.project.refs = [{ id: 'r', title: '임진왜란 요약', url: '', role: 'fact',
+      transcript: '1592년 일본군이 부산에 상륙했습니다. 선조는 의주로 피란했습니다. 이순신은 한산도에서 이겼습니다. 1597년 명량에서 다시 이겼습니다.' }];
+    HS.changed('refs');
+  });
+  await pg.click('#btn-generate');
+  await pg.waitForSelector('#tab-script.on');
+  const p = await pg.evaluate(() => ({ title: HS.project.title, n: HS.project.scenes.length, places: HS.project.map.places.map(x => x.name) }));
+  assert.equal(p.title, '임진왜란 요약');
+  assert.ok(p.n >= 3 && p.places.includes('부산') && p.places.includes('명량'), JSON.stringify(p));
   await pg.context().close();
 });
 

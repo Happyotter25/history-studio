@@ -83,6 +83,8 @@ table.places input{ width:100%; padding:4px 6px; }
 #pr-text{ flex:1; overflow:auto; padding:5vh 8vw; font-size:44px; line-height:1.6; font-weight:700; word-break:keep-all; }
 .pr-bottom{ display:flex; gap:8px; flex-wrap:wrap; justify-content:center; padding:12px; border-top:1px solid #333; }
 .pr-bottom .btn{ background:#222; color:#eee; border-color:#444; } .pr-bottom .btn.primary{ background:var(--accent); border-color:var(--accent); }
+.ref{ border:1px solid var(--line); border-radius:8px; padding:10px; margin-top:8px; background:var(--bg); }
+.ref textarea{ min-height:110px; font-size:13px; }
 .check{ border-left:4px solid var(--line); padding:6px 10px; margin:6px 0; background:var(--bg); border-radius:6px; font-size:14px; }
 .check.wrong{ border-color:#c0392b; } .check.unsupported{ border-color:#d68910; } .check.debated{ border-color:#7d6bb3; } .check.ok{ border-color:#3c8d5a; }
 .check q{ display:block; color:var(--muted); font-size:13px; margin-top:2px; }
@@ -128,6 +130,12 @@ table.places input{ width:100%; padding:4px 6px; }
       <span class="status" id="src-status"></span>
     </div>
     <div id="src-files" class="row" style="margin-top:8px"></div>
+  </div>
+  <div class="card">
+    <div class="row"><b style="flex:1">참고 영상 (유튜브)</b><button class="btn" id="ref-add">참고 영상 더하기</button></div>
+    <p class="small">유튜브 영상 아래 <b>…더보기 → 스크립트 표시</b>를 눌러 나온 자막을 복사해 붙여 넣으세요. 시각 표시와 [음악] 같은 표시는 저절로 지워집니다.
+      <b>사실 자료로</b> 고르면 내용을 참고하되 문장은 새로 쓰고, <b>구성·말투만</b> 고르면 전개 방식만 본뜹니다. 참고한 영상은 업로드 설명란에 출처로 붙습니다.</p>
+    <div id="ref-list"></div>
   </div>
   <div class="card">
     <div class="row">

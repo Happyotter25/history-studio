@@ -87,6 +87,25 @@
 
   /* 소스 묶음: 첨부한 PDF·사진은 문서·그림 블록으로, 붙여 넣은 글은 <source> 로.
    * 첨부는 여러 요청에 똑같이 앞에 두고 캐시 표시를 붙여, 장면 고치기·사실 확인을 되풀이할 때 값이 덜 들게 합니다. */
+  /* ── 참고 영상 (유튜브 스크립트) ─────────────────────────
+   * 유튜브의 "스크립트 표시"에서 복사하면 "0:15" 같은 시각 줄, "[음악]" 같은 표시가 섞여 들어옵니다. 걷어 내고 문장으로 잇습니다. */
+  HS.cleanTranscript = function(raw){
+    var TIME = /^\s*\d{1,2}(:\d{2}){1,2}\s*$/, KTIME = /^\s*(\d+\s*시간\s*)?(\d+\s*분\s*)?(\d+\s*초)?\s*$/;
+    var TAG = /[\[(](음악|박수|웃음|박수 소리|웃음 소리|효과음|Music|Applause|Laughter|music|applause|laughter)[\])]/g;
+    var parts = String(raw || '').replace(/\r/g, '').split('\n').map(function(l){
+      return l.replace(/^\s*\d{1,2}(:\d{2}){1,2}\s+/, '').replace(TAG, '').replace(/^\s*>>\s*/, '').trim();
+    }).filter(function(l){ return l && !TIME.test(l) && !KTIME.test(l); });
+    var text = parts.join(' ').replace(/\s+/g, ' ').trim();
+    // 문장 끝에서 줄을 나누고, 다섯 문장마다 빈 줄로 문단을 만듭니다
+    var sents = text.match(/[^.!?。]+([.!?。]+|$)/g) || [text], out = [], para = [];
+    sents.forEach(function(se){ se = se.trim(); if(!se) return; para.push(se); if(para.length >= 5){ out.push(para.join(' ')); para = []; } });
+    if(para.length) out.push(para.join(' '));
+    return out.join('\n\n');
+  };
+  HS.YT_ID = function(url){ var m = String(url || '').match(/(?:youtu\.be\/|v=|shorts\/|embed\/)([\w-]{11})/); return m ? m[1] : null; };
+  function refs(role){ return (HS.project.refs || []).filter(function(r){ return r.transcript && r.role === role; }); }
+  function refTag(r, tag){ return '<' + tag + ' title="' + String(r.title || r.url || '').replace(/"/g, "'") + '">\n' + r.transcript + '\n</' + tag + '>\n\n'; }
+
   function userContent(text){
     var p = HS.project, blocks = [];
     (p.sourceFiles || []).forEach(function(f){
@@ -96,11 +115,17 @@
     if(blocks.length) blocks[blocks.length - 1].cache_control = { type: 'ephemeral' };
     var src = p.source.trim() ? '<source>\n' + p.source + '\n</source>\n\n' : '';
     if(blocks.length) src = '(첨부한 파일' + (src ? '과 아래 글' : '') + '이 소스입니다.)\n' + src;
+    // 사실 자료로 참고하는 영상: 소스의 하나로 넣되, 문장을 그대로 옮기지 않게 합니다
+    var facts = refs('fact');
+    if(facts.length) src += '다음은 참고 영상의 자막입니다. 사실 확인용 자료로만 쓰고, 문장·표현을 그대로 옮기지 말고 자기 말로 다시 쓰세요.\n' + facts.map(function(r){ return refTag(r, 'reference_video'); }).join('');
+    // 구성·말투만 참고하는 영상: 내용은 쓰지 않습니다
+    var styles = refs('style');
+    if(styles.length) src += '다음 영상은 구성과 말투만 본뜹니다(도입 방식, 질문 던지기, 장면 전개 속도, 마무리). 이 영상의 사실·문장·표현은 쓰지 마세요.\n' + styles.map(function(r){ return refTag(r, 'style_reference'); }).join('');
     blocks.push({ type: 'text', text: src + text });
     return blocks;
   }
   HS.userContent = userContent;
-  HS.hasSource = function(){ var p = HS.project; return !!(p.source.trim() || (p.sourceFiles && p.sourceFiles.length)); };
+  HS.hasSource = function(){ var p = HS.project; return !!(p.source.trim() || (p.sourceFiles && p.sourceFiles.length) || refs('fact').length); };
 
   HS.generateAI = function(onProgress){
     var p = HS.project;
@@ -170,9 +195,10 @@
     return [y && y[0], pl && pl.name].filter(Boolean).join(' · ');
   }
   HS.generateSimple = function(){
-    var p = HS.project, sents = sentences(p.source);
+    var p = HS.project, srcText = p.source.trim() ? p.source : refs('fact').map(function(r){ return r.transcript; }).join('\n\n');
+    var sents = sentences(srcText);
     if(!sents.length) throw new Error(p.sourceFiles && p.sourceFiles.length ? 'PDF·사진 소스는 AI 모드(설정에서 API 키)에서만 읽을 수 있습니다. 글로 붙여 넣으면 간이 모드로도 만들 수 있습니다' : '소스가 비어 있습니다');
-    var first = p.source.trim().split('\n')[0].trim();
+    var first = p.source.trim() ? p.source.trim().split('\n')[0].trim() : (refs('fact')[0].title || '');
     var title = first.length <= 30 && !/[.。]$/.test(first) ? first : headingOf(sents[0]);
     if(title === sents[0]) sents.shift();
     var per = p.options.length === 'short' ? 3 : 2;
@@ -200,7 +226,7 @@
       });
       board.push({ title: (j + 1) / 2 + '. ' + scenes[j].heading.replace(/[은는이가을를]$/, ''), text: lines.join('\n'), drawing: null });
     }
-    var places = findPlaces(p.source), routes = [];
+    var places = findPlaces(srcText), routes = [];
     for(var k = 1; k < places.length && k < 5; k++) routes.push({ from: places[k - 1].name, to: places[k].name, label: '' });
     p.title = p.title || title;
     p.scenes = scenes;
