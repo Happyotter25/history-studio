@@ -10,20 +10,21 @@
   function paint(){
     if(!prepared)return;var s=scene();if(!s)return;var t=HS.teachingSettings(s),v=$('teaching-view').value;
     try{var result=HS.teachingVariant(prepared,t,v==='layout'?'marked':v);if(v==='layout')result=HS.teachingLayout(result,s,true);ctx.drawImage(result,0,0);$('teaching-png').disabled=busy||locked()||prepared.stale;
-      if(drag){ctx.save();ctx.strokeStyle='#5ce1c1';ctx.lineWidth=5;ctx.setLineDash([18,12]);ctx.strokeRect(drag.x*1920,drag.y*1080,(drag.x2-drag.x)*1920,(drag.y2-drag.y)*1080);ctx.restore();}
-    }catch(e){$('teaching-png').disabled=true;ctx.drawImage(prepared.canvas,0,0);status(e.message,true);}
+      if(drag){ctx.save();ctx.strokeStyle='#5ce1c1';ctx.lineWidth=5;ctx.setLineDash([18,12]);ctx.strokeRect(drag.x*1920,drag.y*1080,(drag.x2-drag.x)*1920,(drag.y2-drag.y)*1080);ctx.restore();}return true;
+    }catch(e){$('teaching-png').disabled=true;ctx.drawImage(prepared.canvas,0,0);status(e.message,true);return false;}
   }
   function draw(){
     var n=++revision,p=HS.project,s=scene();prepared=null;resetImage();if(!s)return;
     var t=HS.teachingSettings(s),spec=HS.teachingSpec(s);$('teaching-checked').checked=HS.teachingReadiness(s).checked;
     $('teaching-origin').textContent=spec.origin+' · '+(HS.teachingReadiness(s).checked?'출처 확인 표시됨':'출처·이용 조건 확인 필요');
-    HS.teachingPrepare(s).then(function(r){if(n!==revision||HS.project!==p||scene()!==s)return;prepared=r;paint();if(r.stale)status('자료가 바뀌었습니다. 이전 강조·확대는 적용하지 않습니다. 표시를 초기화하고 다시 지정해 주세요.',true);else if(locked())status('제작 목록이 바뀌었습니다. 자료 제작에서 확정한 뒤 내보내세요.',true);else status('도구를 고르고 화면을 끌거나 아래 숫자 입력으로 표시하세요.');}).catch(function(e){if(n===revision)status(e.message,true);});
+    HS.teachingPrepare(s).then(function(r){if(n!==revision||HS.project!==p||scene()!==s)return;prepared=r;var painted=paint();if(r.stale)status('자료가 바뀌었습니다. 이전 강조·확대는 적용하지 않습니다. 표시를 초기화하고 다시 지정해 주세요.',true);else if(locked())status('제작 목록이 바뀌었습니다. 자료 제작에서 확정한 뒤 내보내세요.',true);else if(painted)status('도구를 고르고 화면을 끌거나 아래 숫자 입력으로 표시하세요.');}).catch(function(e){if(n===revision)status(e.message,true);});
   }
   HS.renderTeaching=function(){
     var ss=HS.project.scenes;selected=Math.min(selected,Math.max(0,ss.length-1));prepared=null;drag=null;history=[];
     $('teaching-empty').hidden=!!ss.length;$('teaching-work').hidden=!ss.length;if(!ss.length){revision++;return;}
     $('teaching-scene').innerHTML=ss.map(function(s,i){return '<option value="'+i+'">'+(i+1)+'. '+HS.esc(s.heading)+'</option>';}).join('');$('teaching-scene').value=selected;
     var s=scene(),t=HS.teachingSettings(s);
+    if($('teaching-view').value==='zoom'&&(!t.crop||t.basis!==HS.teachingSpec(s).basis))$('teaching-view').value='marked';
     $('teaching-kind').innerHTML=Object.keys(HS.TEACHING_KINDS).map(function(k){return '<option value="'+k+'">'+HS.TEACHING_KINDS[k]+'</option>';}).join('');$('teaching-kind').value=t.kind;
     $('teaching-shot').innerHTML='<option value="">첫 번째 완료된 삽화</option>'+(s.shots||[]).map(function(sh,i){return '<option value="'+HS.esc(sh.id)+'">'+(i+1)+'. '+HS.esc(sh.desc||s.heading)+(sh.redo?' · 다시 제작 필요':sh.image?' · 완료':' · 대기')+'</option>';}).join('');$('teaching-shot').value=t.shotId||'';
     ['credit','url','rights','caption','quote'].forEach(function(k){$('teaching-'+k).value=t[k]||'';});$('teaching-checked').checked=HS.teachingReadiness(s).checked;$('teaching-include').checked=t.include!==false;$('teaching-intro').checked=!!t.intro;
@@ -58,6 +59,7 @@
   };
   $('teaching-remove').onclick=function(){var t=HS.teachingSettings(scene());t.image=null;clearCredit(t);changed();HS.renderTeaching();};
   $('teaching-view').onchange=function(){status('');paint();};
+  $('teaching-tool').onchange=function(){$('teaching-view').value='marked';status('화면을 끌어 새 표시나 확대 영역을 지정하세요.');paint();};
   function saveHistory(t){history.push({marks:JSON.parse(JSON.stringify(t.marks)),crop:t.crop?JSON.parse(JSON.stringify(t.crop)):null,basis:t.basis});if(history.length>30)history.shift();}
   function add(m){
     if(!prepared)return;var t=HS.teachingSettings(scene());
@@ -70,7 +72,7 @@
   function pos(e){var r=c.getBoundingClientRect();return {x:Math.max(0,Math.min(1,(e.clientX-r.left)/r.width)),y:Math.max(0,Math.min(1,(e.clientY-r.top)/r.height))};}
   c.onpointerdown=function(e){if(!prepared||!['base','marked'].includes($('teaching-view').value))return;var p=pos(e);drag={type:$('teaching-tool').value,x:p.x,y:p.y,x2:p.x,y2:p.y};c.setPointerCapture(e.pointerId);};
   c.onpointermove=function(e){if(!drag)return;var p=pos(e);drag.x2=p.x;drag.y2=p.y;paint();};
-  c.onpointerup=function(e){if(!drag)return;var m=drag;drag=null;c.releasePointerCapture(e.pointerId);add(m);paint();};
+  c.onpointerup=function(e){if(!drag)return;var m=drag,p=pos(e);m.x2=p.x;m.y2=p.y;drag=null;c.releasePointerCapture(e.pointerId);add(m);paint();};
   c.onpointercancel=function(){drag=null;paint();};
   $('teaching-add').onclick=function(){var m={type:$('teaching-tool').value},valid=true;['x','y','x2','y2'].forEach(function(k){var v=+$('teaching-'+k).value;if(!isFinite(v)||v<0||v>100)valid=false;m[k]=v/100;});if(!valid){status('좌표는 0~100 사이의 숫자로 넣어 주세요.',true);return;}add(m);};
   $('teaching-undo').onclick=function(){var t=HS.teachingSettings(scene()),last=history.pop();if(!last){status('되돌릴 표시가 없습니다.');return;}Object.keys(last).forEach(function(k){t[k]=last[k];});changed();draw();};
@@ -82,7 +84,8 @@
     var s=scene(),t=HS.teachingSettings(s),v=$('teaching-view').value,result=HS.teachingVariant(prepared,t,v==='layout'?'marked':v);
     // 강사 공간은 검은 빈 공간으로 내보내며 안내 글자는 제외합니다.
     if(v==='layout')result=HS.teachingLayout(result,s,false);
-    return HS.teachingBlob(result).then(function(b){HS.download(HS.fileName(' 강의자료 '+v+'.png'),b);});
+    var label={base:'원본',marked:'강조',zoom:'확대',layout:'강사 배치'}[v],name=String(selected+1).padStart(2,'0')+' '+String(s.heading||'강의 자료').replace(/[\\/:*?"<>|]/g,'').slice(0,60)+' '+label+'.png';
+    return HS.teachingBlob(result).then(function(b){HS.download(name,b);});
   });};
   HS.onChange(function(what){if(what==='all')return;if(['shots','scene','scenes','materials'].includes(what)&&$('tab-teaching').classList.contains('on'))HS.renderTeaching();});
 })();

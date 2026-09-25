@@ -46,7 +46,7 @@ This repo was started from the same author's 어전회의 (eojeon) project and f
 ```
 npm run setup     # npm install + npx playwright install chromium (needs internet)
 npm run check     # syntax of every script + index.html script list (offline, a second)
-npm test          # node tests/e2e.mjs — 78 Playwright tests (Chromium runs with a fake microphone);
+npm test          # node tests/e2e.mjs — 79 Playwright tests (Chromium runs with a fake microphone);
                   # Claude / OpenAI / Gemini / YouTube oEmbed are all mocked, so no keys or network are needed
 ```
 Codex sandboxes usually have no network while the agent runs: do `npm run setup` in the environment's setup
@@ -151,6 +151,8 @@ Drawing code sizes things by `Math.min(w, h) / 720` so the same code serves 16:9
 - `exportTeachingPack`: snapshots selected scenes and map; exports ready base, optional title, marks and crop PNGs + JSON/TXT source manifest with skipped reasons. `exportTeachingPptx`: selected scenes must all be ready, same sequence, right speaker space, editable caption, full narration/source notes. Existing storyboard exports remain available separately.
 - Reconfirming material plans preserves teaching settings for matching material IDs with unchanged narration. Changing imagery invalidates annotations by fingerprint. A stale material plan blocks exports.
 - `docs/CHANNEL_ANALYSIS.md`: observational sample of all 10 public videos, not whole-channel full-duration viewing or historical fact validation.
-- `TEST_FILTER='강의 자료:' npm test` runs the focused teaching tests. Full `npm test` still required before committing (now 78 cases).
+- `TEST_FILTER='강의 자료:' npm test` runs the focused teaching tests. Full `npm test` still required before committing (now 79 cases).
 
 - Teaching readiness is metadata-based (image decode still happens at preview/export). `checkedBasis` binds the user source confirmation to the rendered source; changed sources are unverified. Explicit missing shot selections never fall back to unrelated scene images. `tools/screens.mjs` also captures the teaching readiness UI.
+
+- Teaching preview falls back from zoom to marked on scene/source navigation if no valid crop exists; choosing a drawing tool returns to marked mode. Individual PNG filenames snapshot the scene number, heading and Korean variant before asynchronous encoding. Preview errors must not be overwritten by generic instructions.

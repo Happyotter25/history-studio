@@ -1506,6 +1506,20 @@ await test('강의 자료: 준비 현황·구간 이동·출처 재확인·선�
   await pg.context().close();
 });
 
+await test('강의 자료: 확대 후 구간 이동·다시 그리기·오류 안내·개별 파일명',async()=>{
+  const pg=await materialFixture(true);await pg.click('#tabs button[data-tab=teaching]');await pg.selectOption('#teaching-scene','7');await pg.waitForFunction(()=>!document.getElementById('teaching-png').disabled);
+  await pg.click('.teaching-coordinates summary');await pg.selectOption('#teaching-tool','crop');await pg.click('#teaching-add');
+  assert.equal(await pg.locator('#teaching-view').inputValue(),'zoom');
+  await pg.selectOption('#teaching-tool','arrow');assert.equal(await pg.locator('#teaching-view').inputValue(),'marked');
+  await pg.selectOption('#teaching-view','zoom');await pg.selectOption('#teaching-scene','4');await pg.waitForFunction(()=>!document.getElementById('teaching-png').disabled);
+  assert.equal(await pg.locator('#teaching-view').inputValue(),'marked');
+  await pg.evaluate(()=>{window.savedTeachingName='';HS.download=(name)=>{window.savedTeachingName=name;};});await pg.click('#teaching-png');await pg.waitForFunction(()=>window.savedTeachingName);
+  assert.match(await pg.evaluate(()=>window.savedTeachingName),/^05 .* 강조\.png$/);
+  await pg.selectOption('#teaching-view','zoom');await pg.check('#teaching-checked');await pg.waitForTimeout(150);
+  assert.match(await pg.locator('#teaching-status').textContent(),/확대 영역/);assert.ok(await pg.locator('#teaching-png').isDisabled());
+  await pg.context().close();
+});
+
 await browser.close();
 const bad = results.filter(r => !r[0]);
 console.log(`\n${results.length - bad.length} / ${results.length} 통과`);
