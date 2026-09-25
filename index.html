@@ -85,6 +85,7 @@ table.places input{ width:100%; padding:4px 6px; }
 .pr-bottom .btn{ background:#222; color:#eee; border-color:#444; } .pr-bottom .btn.primary{ background:var(--accent); border-color:var(--accent); }
 .ref{ border:1px solid var(--line); border-radius:8px; padding:10px; margin-top:8px; background:var(--bg); }
 .ref textarea{ min-height:110px; font-size:13px; }
+.kind-edit textarea, .kind-edit input{ font-size:13px; }
 .check{ border-left:4px solid var(--line); padding:6px 10px; margin:6px 0; background:var(--bg); border-radius:6px; font-size:14px; }
 .check.wrong{ border-color:#c0392b; } .check.unsupported{ border-color:#d68910; } .check.debated{ border-color:#7d6bb3; } .check.ok{ border-color:#3c8d5a; }
 .check q{ display:block; color:var(--muted); font-size:13px; margin-top:2px; }
@@ -401,6 +402,17 @@ table.places input{ width:100%; padding:4px 6px; }
     <p class="small">키는 이 브라우저(localStorage)에만 저장되며 프로젝트 백업 파일에는 들어가지 않습니다. 요청은 브라우저에서 Anthropic으로 바로 갑니다. <span id="cfg-cost"></span></p>
   </div>
   <div class="card">
+    <p><b>AI 이미지 (선택)</b> <span class="small">사진·그림풍 장면 그림을 만들 때 씁니다. Claude는 이미지를 만들지 않아서 다른 회사의 키가 필요합니다.</span></p>
+    <div class="row">
+      <select id="img-provider"><option value="">사용 안 함</option><option value="openai">OpenAI</option><option value="gemini">Google Gemini</option></select>
+      <input type="password" id="img-key" placeholder="이미지 서비스 API 키" style="flex:1;min-width:200px" autocomplete="off">
+      <input type="text" id="img-model" placeholder="모델 (비우면 기본)" style="width:190px">
+      <button class="btn primary" id="img-save">저장</button>
+    </div>
+    <p class="small" id="img-help">키는 이 브라우저에만 저장되고 백업에는 들어가지 않습니다. OpenAI 키는 platform.openai.com, Gemini 키는 aistudio.google.com 에서 만듭니다.
+      비용은 그림 한 장에 대략 50~100원(서비스·품질에 따라 다름)입니다.</p>
+  </div>
+  <div class="card">
     <p><b>되돌리기 기록</b></p>
     <p class="small">대본을 새로 만들거나 AI로 고치기·그리기, 백업 불러오기, 새 프로젝트 전에 그때 상태를 자동으로 남깁니다 (최근 10개).</p>
     <div id="undo-list"></div>
@@ -439,7 +451,9 @@ table.places input{ width:100%; padding:4px 6px; }
 <script src="assets/scriptgen.js"></script>
 <script src="assets/board.js"></script>
 <script src="assets/scene-art.js"></script>
+<script src="assets/scene-kinds.js"></script>
 <script src="assets/ai-art.js"></script>
+<script src="assets/image-gen.js"></script>
 <script src="assets/voice.js"></script>
 <script src="assets/character.js"></script>
 <script src="assets/map.js"></script>

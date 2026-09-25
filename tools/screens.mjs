@@ -52,4 +52,16 @@ await pg.evaluate(() => {
 await pg.click('#tabs button[data-tab=video]'); await pg.waitForTimeout(400);
 await pg.evaluate(async () => { await HS.preloadImages(); const c = document.getElementById('video-canvas'), tl = HS.timeline(); HS.drawVideoFrame(c.getContext('2d'), c.width, c.height, tl[1].start + 3, {}); });
 await pg.locator('#video-canvas').screenshot({ path: path.join(root, 'docs/character.png') });
+// 역사 장면 종류 네 가지를 한 장에
+const kinds = await pg.evaluate(() => {
+  const S = [
+    { heading: '선조, 한양을 떠나다', keywords: ['의주'], kind: 'source', data: { original: '上出宮門百官不從者多', translation: '임금이 궁궐 문을 나서니, 따르지 않은 관리가 많았다. 행렬은 개성을 지나 평양을 거쳐 의주로 향하였다.', cite: '선조수정실록 25년 4월' } },
+    { heading: '임진왜란의 흐름', kind: 'timeline', data: { events: [{ year: '1592', label: '부산 상륙' }, { year: '1592', label: '한산도 대첩' }, { year: '1593', label: '행주 대첩' }, { year: '1597', label: '명량 해전' }, { year: '1598', label: '노량 해전' }] } },
+    { heading: '전쟁을 이끈 사람들', kind: 'people', data: { people: [{ name: '선조', role: '조선의 왕' }, { name: '이순신', role: '삼도수군통제사' }, { name: '원균', role: '경상우수사' }, { name: '류성룡', role: '영의정' }], links: [{ from: '류성룡', to: '이순신', label: '천거' }, { from: '선조', to: '이순신', label: '파직·재기용' }, { from: '원균', to: '이순신', label: '갈등' }] } },
+    { heading: '1592년, 두 나라의 군대', kind: 'compare', data: { left: '조선', right: '일본', rows: [{ label: '주력 무기', left: '활, 화포', right: '조총' }, { label: '바다', left: '판옥선 · 화포', right: '백병전 중심' }, { label: '전쟁 경험', left: '오랜 평화', right: '전국 시대 백 년' }] } }];
+  const c = document.createElement('canvas'); c.width = 1280; c.height = 720; const x = c.getContext('2d');
+  S.forEach((s, i) => { const t = document.createElement('canvas'); t.width = 1280; t.height = 720; HS.drawDataScene(t.getContext('2d'), 1280, 720, s, 1); x.drawImage(t, (i % 2) * 640, Math.floor(i / 2) * 360, 640, 360); });
+  return c.toDataURL('image/png').split(',')[1];
+});
+(await import('node:fs')).writeFileSync(path.join(root, 'docs/scene-kinds.png'), Buffer.from(kinds, 'base64'));
 await b.close();

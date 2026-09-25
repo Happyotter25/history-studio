@@ -39,7 +39,7 @@ const AI_ANSWER = {
   map: { title: '명량 해전', places: [{ name: '명량', lon: 126.31, lat: 34.57, kind: 'battle' }, { name: '한양', lon: 126.98, lat: 37.57, kind: 'capital' }], routes: [{ from: '명량', to: '한양', label: '서해 진출 저지' }],
     regions: [{ name: '조선(대략)', color: '#2f6db3', points: [[124.5, 40], [129.5, 42.5], [129.5, 35], [126.5, 34.3], [126.2, 37.5]] }] }
 };
-AI_ANSWER.scenes.forEach((x, i) => { x.use_map = i === 1; x.caption = ['', '1597년 · 명량', ''][i]; x.transition = ['fade', 'ink', 'wipe'][i];
+AI_ANSWER.scenes.forEach((x, i) => { x.kind = i === 1 ? 'map' : 'illust'; x.data = { original: '', translation: '', cite: '', events: [], people: [], links: [], left: '', right: '', rows: [] }; x.caption = ['', '1597년 · 명량', ''][i]; x.transition = ['fade', 'ink', 'wipe'][i];
   x.keywords = [['13척', '없는말'], ['울돌목'], ['명량 해전']][i]; });
 // 삽화가 답: 위험한 것(스크립트, 바깥 그림, onload)을 섞어 걸러지는지 봅니다
 const SVG_ANSWER = '그림입니다.\n<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" onload="alert(1)">' +
@@ -115,6 +115,10 @@ await test('키 없이 간이 방식으로 대본·판서·지도를 만든다',
   assert.ok(p.scenes.length >= 5, '장면 ' + p.scenes.length);
   assert.equal(p.title, '임진왜란');
   assert.ok(p.board.length >= 2);
+  // 연도가 여럿이면 끝에 연표 장면
+  const last = p.scenes[p.scenes.length - 1];
+  assert.equal(last.kind, 'timeline');
+  assert.ok(last.data.events.length >= 3 && last.data.events[0].year === '1592', JSON.stringify(last.data.events));
   const names = p.map.places.map(x => x.name);
   for (const n of ['부산', '한양', '명량']) assert.ok(names.includes(n), n + ' 없음');
   assert.equal(await page.locator('#scene-list .scene').count(), p.scenes.length);
@@ -830,6 +834,101 @@ await test('참고 영상: 사실 자료와 구성·말투 참고를 나눠 Clau
   await ai.fill('#up-desc', '고친 설명' + await ai.evaluate(() => HS.descriptionSuffix()));
   assert.equal(await ai.evaluate(() => HS.project.upload.description), '고친 설명');
   await ai.evaluate(() => { HS.project.refs = []; HS.changed('refs'); });
+});
+
+await test('역사 장면: 사료·연표·인물 관계도·비교표를 고르고 편집하면 영상과 PPT에 그려진다', async () => {
+  await ai.click('#tabs button[data-tab=video]');
+  await ai.evaluate(() => { HS.project.aspect = '16:9'; HS.changed('all'); });
+  const card = i => `#vid-scenes .scene[data-i="${i}"]`;
+  // 0번 장면(제목)은 두고 2번 장면을 차례로 바꿔 봅니다
+  const frames = {};
+  for (const [kind, fill] of [
+    ['source', async () => { await ai.fill(card(2) + ' [data-d=original]', '上出宮門'); await ai.fill(card(2) + ' [data-d=translation]', '임금이 궁궐 문을 나섰다.'); await ai.fill(card(2) + ' [data-d=cite]', '선조수정실록'); }],
+    ['timeline', async () => { await ai.fill(card(2) + ' [data-kindtext]', '1592 | 부산 상륙\n1593 | 행주 대첩\n1597 | 명량 해전'); }],
+    ['people', async () => { await ai.fill(card(2) + ' [data-kindtext]', '선조 | 왕\n이순신 | 통제사'); await ai.fill(card(2) + ' [data-links]', '선조 > 이순신 : 임명'); }],
+    ['compare', async () => { await ai.fill(card(2) + ' [data-d=left]', '조선'); await ai.fill(card(2) + ' [data-d=right]', '일본'); await ai.fill(card(2) + ' [data-kindtext]', '무기 | 활 | 조총'); }]]) {
+    await ai.selectOption(card(2) + ' select[data-act=kind]', kind);
+    await fill();
+    frames[kind] = await ai.evaluate(() => { const c = document.createElement('canvas'); c.width = 320; c.height = 180; HS.drawDataScene(c.getContext('2d'), 320, 180, HS.project.scenes[2], 1); return c.toDataURL(); });
+  }
+  assert.equal(new Set(Object.values(frames)).size, 4, '종류마다 다른 그림이어야 함');
+  const d = await ai.evaluate(() => HS.project.scenes[2].data);
+  assert.equal(d.original, '上出宮門');
+  assert.deepEqual(d.events.map(e => e.year), ['1592', '1593', '1597']);
+  assert.deepEqual(d.links, [{ from: '선조', to: '이순신', label: '임명' }]);
+  assert.deepEqual(d.rows, [{ label: '무기', left: '활', right: '조총' }]);
+  assert.equal(await ai.evaluate(() => HS.sceneKind(HS.project.scenes[2])), 'compare');
+  // 쓰는 도중(k=0.3)과 다 된 모습(k=1)이 다르고, 영상 한 장면 안에서 움직입니다
+  const moving = await ai.evaluate(() => { const s = HS.project.scenes[2], c = document.createElement('canvas'); c.width = 320; c.height = 180; const x = c.getContext('2d');
+    HS.drawDataScene(x, 320, 180, s, 0.3); const a = c.toDataURL(); HS.drawDataScene(x, 320, 180, s, 1); return a !== c.toDataURL(); });
+  assert.ok(moving);
+  // 그림이 필요한 장면에서 빠집니다 (AI 그림·캐릭터 일괄)
+  assert.equal(await ai.evaluate(() => HS.needsPicture(HS.project.scenes[2])), false);
+  // 스토리 PPT 장면 그림도 이 장면으로
+  const same = await ai.evaluate(() => { const s = HS.project.scenes[2], c = document.createElement('canvas'); c.width = 320; c.height = 180; HS.drawDataScene(c.getContext('2d'), 320, 180, s, 1); return HS.sceneStill(s, 320, 180).toDataURL() === c.toDataURL(); });
+  assert.ok(same);
+  await ai.selectOption(card(2) + ' select[data-act=kind]', 'illust');
+});
+
+await test('역사 장면: AI가 장면 종류와 자료를 정해 준다', async () => {
+  const saved = JSON.parse(JSON.stringify(AI_ANSWER));
+  AI_ANSWER.scenes[2].kind = 'timeline';
+  AI_ANSWER.scenes[2].data.events = [{ year: '1597', label: '명량 해전' }, { year: '1598', label: '노량 해전' }, { year: '1598', label: '전쟁 끝' }];
+  const n = aiBodies.length;
+  await ai.evaluate(() => HS.generateAI());
+  Object.assign(AI_ANSWER, saved);
+  const r = await ai.evaluate(() => HS.project.scenes.map(s => [HS.sceneKind(s), (s.data && s.data.events || []).length]));
+  assert.deepEqual(r, [['illust', 0], ['map', 0], ['timeline', 3]]);
+  const schema = aiBodies[n].output_config.format.schema.properties.scenes.items;
+  assert.ok(schema.required.includes('kind') && schema.properties.kind.enum.includes('compare'));
+  assert.ok(schema.properties.data.required.includes('rows'));
+});
+
+await test('AI 이미지(OpenAI): 설정한 키로 장면 그림을 만들어 넣는다', async () => {
+  const png = await ai.evaluate(() => { const c = document.createElement('canvas'); c.width = 1536; c.height = 1024; const x = c.getContext('2d'); x.fillStyle = '#00ff00'; x.fillRect(0, 0, 1536, 1024); return c.toDataURL('image/png').split(',')[1]; });
+  let req = null;
+  await ai.context().route('https://api.openai.com/v1/images/generations', async route => {
+    req = { body: JSON.parse(route.request().postData()), auth: route.request().headers()['authorization'] };
+    await route.fulfill({ status: 200, headers: { 'content-type': 'application/json', 'access-control-allow-origin': '*' }, body: JSON.stringify({ data: [{ b64_json: png }] }) });
+  });
+  await ai.click('#tabs button[data-tab=settings]');
+  await ai.selectOption('#img-provider', 'openai');
+  await ai.fill('#img-key', 'sk-img-test');
+  await ai.click('#img-save');
+  assert.ok(await ai.evaluate(() => !localStorage.getItem('hs.project') && !JSON.stringify(HS.project).includes('sk-img-test')), '키가 프로젝트에 들어감');
+  await ai.click('#tabs button[data-tab=video]');
+  await ai.click('#vid-scenes .scene[data-i="0"] button[data-act=aiimage]');
+  await ai.waitForFunction(() => HS.project.scenes[0].image && HS.project.scenes[0].image.startsWith('data:image/jpeg'));
+  assert.equal(req.auth, 'Bearer sk-img-test');
+  assert.equal(req.body.model, 'gpt-image-1');
+  assert.equal(req.body.size, '1536x1024');
+  assert.ok(req.body.prompt.includes(await ai.evaluate(() => HS.project.scenes[0].prompt)) && /no text/i.test(req.body.prompt), req.body.prompt);
+  const px = await ai.evaluate(async () => { await HS.preloadImages(); return Array.from(HS.sceneStill(HS.project.scenes[0], 64, 36).getContext('2d').getImageData(32, 18, 1, 1).data); });
+  assert.ok(px[1] > 200 && px[0] < 60, '받은 그림이 안 쓰임 ' + px);
+});
+
+await test('AI 이미지(Gemini): 세로 쇼츠 비율로 요청하고, 규칙 위반은 알기 쉽게 알린다', async () => {
+  const png = await ai.evaluate(() => { const c = document.createElement('canvas'); c.width = 90; c.height = 160; c.getContext('2d').fillRect(0, 0, 90, 160); return c.toDataURL('image/png').split(',')[1]; });
+  let calls = 0, req = null;
+  await ai.context().route('https://generativelanguage.googleapis.com/**', async route => {
+    calls++; req = { url: route.request().url(), body: JSON.parse(route.request().postData()), key: route.request().headers()['x-goog-api-key'] };
+    if (calls === 2) return route.fulfill({ status: 200, headers: { 'content-type': 'application/json', 'access-control-allow-origin': '*' }, body: JSON.stringify({ candidates: [{ finishReason: 'IMAGE_SAFETY', content: { parts: [] } }] }) });
+    await route.fulfill({ status: 200, headers: { 'content-type': 'application/json', 'access-control-allow-origin': '*' }, body: JSON.stringify({ candidates: [{ content: { parts: [{ text: '여기 있어요' }, { inlineData: { mimeType: 'image/png', data: png } }] } }] }) });
+  });
+  const r = await ai.evaluate(async () => {
+    HS.saveImageSettings('gemini', 'g-key', '');
+    HS.project.aspect = '9:16';
+    await HS.drawSceneImage(1);
+    let err = ''; try { await HS.drawSceneImage(1); } catch (e) { err = e.message; }
+    HS.project.aspect = '16:9'; HS.saveImageSettings('', '', '');
+    return { img: HS.project.scenes[1].image.slice(0, 15), err };
+  });
+  assert.ok(req.url.includes('/models/gemini-2.5-flash-image:generateContent'), req.url);
+  assert.equal(req.key, 'g-key');
+  assert.equal(req.body.generationConfig.imageConfig.aspectRatio, '9:16');
+  assert.deepEqual(req.body.generationConfig.responseModalities, ['IMAGE']);
+  assert.equal(r.img, 'data:image/jpeg');
+  assert.ok(r.err.includes('이미지 규칙'), r.err);
 });
 
 await test('그림·목소리가 든 프로젝트가 IndexedDB에 저장되어 다시 열어도 남는다', async () => {

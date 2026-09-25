@@ -50,6 +50,11 @@
 
   function drawSceneFrame(ctx, w, h, s, k, local){
     var img = HS.sceneImage(s), layers = !img && HS.sceneLayers(s);
+    if(HS.isDataScene(s)){
+      // 사료·연표·인물 관계도·비교표: 장면이 흐르는 동안 차례로 써지고 이어집니다 (끝 20%는 다 된 모습)
+      HS.drawDataScene(ctx, w, h, s, Math.min(1, k * 1.25));
+      return;
+    }
     if(s.useMap && HS.project.map.places.length){
       // 지도 장면: 장면이 흐르는 동안 경로가 그려집니다
       HS.drawMap(ctx, w, h, HS.project.map, { style: HS.project.mapStyle || 'old', progress: Math.min(1, k * 1.3) });

@@ -1,6 +1,18 @@
 # AGENTS.md — 사관 스튜디오 (history-studio) handover for coding agents
 
-Read this first. The user-facing guide is `README.md` (Korean).
+Read this first. It is written for any coding agent — OpenAI Codex (CLI / cloud), Claude Code
+(`CLAUDE.md` points here), or others. The user-facing guide is `README.md` (Korean); the user's guide
+to connecting Codex is `docs/CODEX.md`.
+
+## Working agreement (all agents)
+- Talk to the user in Korean, plainly (they are a history teacher, not a developer). Proceed without many questions.
+- Before every commit: `npm run check` (syntax, offline) and `npm test` (Playwright end-to-end). Both must pass.
+  If Chromium cannot be installed in your sandbox, run `npm run check`, say that `npm test` could not run, and why.
+- After visual changes, regenerate and look at screenshots (`npm run screens`), not just the tests.
+- Never commit API keys. Keys live only in the browser's `localStorage` (`hs.key`, `hs.imgKey`) and are excluded from backups.
+- Don't edit generated/vendored files by hand: `content/geo.js`, `assets/vendor/*`.
+- Keep `README.md` (Korean, for the user) and this file in sync when you add features or change the data model.
+- Work on a branch and let the user merge; `main` is what the user downloads as ZIP.
 
 ## What this is
 A static web app that helps a Korean high-school history teacher make history YouTube videos.
@@ -17,11 +29,15 @@ This repo was started from the same author's 어전회의 (eojeon) project and f
   streaming + structured output (`output_config.format` json_schema). Default model `claude-opus-5`
   with server-side refusal fallback (`fallbacks: 'default'`).
 
-## Test (run before every commit)
+## Setup and test
 ```
-npm install
-npm test          # node tests/e2e.mjs — 47 Playwright tests (Chromium runs with a fake microphone), Claude API is mocked (SSE, routed by system prompt)
+npm run setup     # npm install + npx playwright install chromium (needs internet)
+npm run check     # syntax of every script + index.html script list (offline, a second)
+npm test          # node tests/e2e.mjs — 51 Playwright tests (Chromium runs with a fake microphone);
+                  # Claude / OpenAI / Gemini / YouTube oEmbed are all mocked, so no keys or network are needed
 ```
+Codex sandboxes usually have no network while the agent runs: do `npm run setup` in the environment's setup
+step (Codex cloud: environment setup script), or point `CHROMIUM_PATH` at an installed Chromium.
 `CHROMIUM_PATH=/path/to/chromium npm test` uses a specific browser.
 Headless Chromium renames non-ASCII download names to `download`; tests read the name
 the app chose by wrapping `HS.download`.
@@ -34,6 +50,8 @@ the app chose by wrapping `HS.download`.
 | `assets/scriptgen.js` | Source → script. `HS.generateAI` (schema `HS.SCRIPT_SCHEMA`), offline `HS.generateSimple`, `HS.rewriteScene`, `HS.factCheck`; `HS.userContent` puts attached PDFs/images first as document/image blocks with `cache_control` on the last one, then `<source>`, then reference videos (`<reference_video>` = facts, rewritten not copied; `<style_reference>` = structure/tone only); `HS.cleanTranscript` cleans pasted YouTube transcripts; `HS.YT_ID` |
 | `assets/board.js` | Board line syntax (`HS.parseBoardLine`), chalkboard background, `HS.drawBoardSlide` (with `progress` for the writing animation), `HS.boardChars` |
 | `assets/scene-art.js` | Procedural mood backgrounds for scenes without an image (`HS.drawSceneArt`) |
+| `assets/scene-kinds.js` | History scene types drawn instead of a picture: `source` (scroll, original text written vertically + translation + citation), `timeline`, `people` (relationship diagram), `compare` (two-column table). `HS.drawDataScene(ctx,w,h,scene,k)` animates by progress k; `HS.sceneKind`, `HS.needsPicture`, `HS.kindToText/textToKind` (editor line formats) |
+| `assets/image-gen.js` | Raster scene images from OpenAI (`/v1/images/generations`, default `gpt-image-1`) or Google Gemini (`generateContent` with `responseModalities: ['IMAGE']`, default `gemini-2.5-flash-image`); key in `hs.imgKey`; `HS.drawSceneImage(i)` → `scene.image` |
 | `assets/ai-art.js` | Claude-drawn SVG illustrations in 3 layers (`far/mid/near`) for parallax; `HS.cleanSvg` sanitizes (no script/image/text/external refs) |
 | `assets/voice.js` | Per-scene narration audio (mic via MediaRecorder or file), `HS.playNarration` schedules voices + background music (gain curve `HS.bgmGainAt`: fade in/out, ducking under `HS.voiceSpans`) on the timeline (speakers or a MediaStream destination for recording) |
 | `assets/video.js` | Timeline (voice length drives scene length), `HS.frameSize` (16:9 or 9:16 from `project.aspect`), Ken Burns / SVG parallax (cover-fit) / map scenes, transitions (fade/ink/wipe/cut), captions (lower-third name tags), subtitles (`HS.drawVideoFrame`), `HS.recordCanvas` (MediaRecorder → WebM, optional audio) |
@@ -57,7 +75,8 @@ the app chose by wrapping `HS.download`.
 ```
 { version, id, title, aspect('16:9'|'9:16'), source, sourceFiles:[{name, mediaType, data(base64), size}], refs:[{id, title, url, channel, transcript, role(fact|style)}], options:{length,audience,tone}, mapStyle,
   bgm:{name, data(dataURL), dur, volume, duck}|null,
-  scenes:[{heading, narration, visual, prompt, mood, motion, useMap,
+  scenes:[{heading, narration, visual, prompt, mood, motion, kind(illust|map|source|timeline|people|compare), useMap(= kind is map),
+           data:{original, translation, cite, events[{year,label}], people[{name,role}], links[{from,to,label}], left, right, rows[{label,left,right}]},
            caption, transition(fade|ink|wipe|cut), keywords[] (yellow in subtitles), character:{id, side}|null,
            image(dataURL|null), svg(string|null), audio(dataURL|null), audioDur, dur(seconds override|null)}],
   board:[{title, text, drawing(dataURL|null), dw, dh}],
@@ -68,7 +87,7 @@ the app chose by wrapping `HS.download`.
   characters:[{id, name, image(PNG dataURL), w, h}],
   lesson:{goals, quiz:[{type(choice|ox|short), question, choices, answer, explain, scene}], summary('[[key]]' marks blanks), activity:{title, steps}, discussion}|null }
 ```
-Scene picture priority: `useMap` → `image` → `svg` → procedural background.
+Scene picture priority: data scene kinds → `useMap` → `image` → `svg` → procedural background.
 Startup is async: wait for `HS.ready` (the UI sets `body[data-ready]` when done).
 mood ∈ dawn|day|dusk|night|war|sea|court|snow, motion ∈ zoomIn|zoomOut|panLeft|panRight,
 kind ∈ capital|city|battle. Keep `HS.SCRIPT_SCHEMA` in sync when changing fields.
@@ -78,13 +97,15 @@ Drawing code sizes things by `Math.min(w, h) / 720` so the same code serves 16:9
 ## Conventions
 - Plain ES5-style browser JS, no frameworks or bundler. Must keep working from `file://`.
 - UI text and comments are Korean (polite 해요체/합니다체 in the UI).
-- `localStorage` keys are prefixed `hs.` (key, model, cost, tab, format). The project itself lives in IndexedDB. Backups never include `hs.key`.
+- `localStorage` keys are prefixed `hs.` (key, model, cost, tab, format, imgProvider, imgKey, imgModel). The project itself lives in IndexedDB. Backups never include `hs.key`.
 - Keep the mobile layout free of horizontal overflow (tested).
 - `.btn` sets `display`, so a global `[hidden]{display:none !important}` keeps the `hidden` attribute working.
 - After visual changes, look at screenshots (`node tools/screens.mjs`), not just the tests.
 
 ## Ideas / next steps
-- Raster image generation via an external image API (needs another provider key) as an alternative to SVG art.
+- Long video → Shorts extraction (pick the best 60 s, re-cut to 9:16).
+- Curriculum (2022 개정 교육과정 성취기준) based series planning.
+- Classroom presentation mode (step through scenes, board writing, quiz reveal).
 - Cloud TTS (e.g. a Korean TTS API) so narration can be generated instead of recorded.
 - Prepared historical-border datasets per era instead of hand-drawn/AI-approximated regions.
 - Photo drawings: vectorize (skeleton → strokes) so they animate stroke by stroke like pad drawings.

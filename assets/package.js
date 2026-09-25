@@ -82,11 +82,12 @@
   var STEPS = [
     { id: 'script', label: '대본·판서·지도', ai: 300, run: function(ai, say){ return ai ? HS.generateAI(say) : Promise.resolve().then(HS.generateSimple); } },
     { id: 'art', label: '빈 장면 AI 그림', aiOnly: true, perScene: 200, run: function(ai, say, ctl){
-      var todo = P().scenes.map(function(s, i){ return (!s.image && !s.svg && !s.useMap) ? i : -1; }).filter(function(i){ return i >= 0; }), k = 0;
+      var img = HS.imageOn();
+      var todo = P().scenes.map(function(s, i){ return (!s.image && !s.svg && HS.needsPicture(s)) ? i : -1; }).filter(function(i){ return i >= 0; }), k = 0;
       return (function next(){
         if(ctl.stopped || k >= todo.length) return Promise.resolve();
         var i = todo[k++]; say('#' + (i + 1) + ' 그리는 중 (' + k + '/' + todo.length + ')');
-        return HS.drawSceneAI(i).then(next);
+        return (img ? HS.drawSceneImage(i) : HS.drawSceneAI(i)).then(next);
       })();
     } },
     { id: 'check', label: '사실 확인', aiOnly: true, ai: 200, run: function(){ return HS.factCheck(); } },
@@ -98,14 +99,14 @@
   // 예상 비용(원, 어림): 장면 수는 영상 길이로 짐작합니다
   HS.estimateCost = function(chosen){
     var scenes = P().scenes.length || { short: 5, mid: 11, long: 18 }[P().options.length] || 11, won = 0;
-    STEPS.forEach(function(s){ if(chosen.indexOf(s.id) >= 0) won += s.perScene ? s.perScene * scenes : s.ai; });
-    return aiOn() ? won : 0;
+    STEPS.forEach(function(s){ if(chosen.indexOf(s.id) >= 0) won += s.perScene ? (HS.imageOn() ? HS.imageCostWon() : s.perScene) * scenes : s.ai; });
+    return aiOn() || HS.imageOn() ? won : 0;
   };
   function chosen(){ return STEPS.filter(function(s){ var c = $('pipe-' + s.id); return c && c.checked && !c.disabled; }).map(function(s){ return s.id; }); }
   function drawPlan(){
     var on = aiOn();
     $('pipe-steps').innerHTML = STEPS.map(function(s){
-      var dis = s.aiOnly && !on;
+      var dis = s.aiOnly && !on && !(s.id === 'art' && HS.imageOn());
       return '<label class="inline" style="margin-right:12px"><input type="checkbox" id="pipe-' + s.id + '"' + (dis ? ' disabled' : ' checked') + (s.id === 'script' ? ' disabled checked' : '') + '> ' + s.label + (dis ? ' (AI 필요)' : '') + '</label>';
     }).join('');
     var sc = $('pipe-script'); if(sc) sc.disabled = true;
@@ -113,7 +114,7 @@
   }
   function drawCost(){
     var won = HS.estimateCost(chosen().concat(['script']));
-    $('pipe-cost').textContent = aiOn() ? '예상 비용 약 ' + won.toLocaleString() + '원 (어림)' : 'AI 없이 간이 방식으로 만듭니다 (무료)';
+    $('pipe-cost').textContent = aiOn() || HS.imageOn() ? '예상 비용 약 ' + won.toLocaleString() + '원 (어림)' : 'AI 없이 간이 방식으로 만듭니다 (무료)';
   }
   HS.drawPipelinePlan = drawPlan;
   var ctl = null;

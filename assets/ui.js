@@ -246,22 +246,40 @@
     $('vid-timeline').innerHTML = tl.map(function(seg){
       var s = scenes[seg.i], w = (seg.i === tl.length - 1 ? seg.dur : seg.dur - 0.8) / total * 100;
       var on = playT >= seg.start && playT < seg.start + seg.dur - (seg.i === tl.length - 1 ? 0 : 0.8);
-      return '<div data-t="' + (seg.start + (seg.i ? 0.9 : 0)) + '" class="' + (on ? 'on' : '') + '" style="width:' + w + '%;background:' + (s.useMap ? '#8a6a45' : MOOD_COLOR[s.mood] || '#555') + '">' + (seg.i + 1) + '. ' + HS.esc(s.heading) + '</div>';
+      return '<div data-t="' + (seg.start + (seg.i ? 0.9 : 0)) + '" class="' + (on ? 'on' : '') + '" style="width:' + w + '%;background:' + ({ map: '#8a6a45', source: '#a8874f', timeline: '#6b4a2b', people: '#5a6b8a', compare: '#4f6b5a' }[HS.sceneKind(s)] || MOOD_COLOR[s.mood] || '#555') + '">' + (seg.i + 1) + '. ' + HS.esc(s.heading) + '</div>';
     }).join('');
+  }
+  // 장면 종류별 편집 칸
+  function kindEditor(s, kind){
+    var d = s.data || {}, ta = function(attr, val, ph, h){ return '<textarea ' + attr + ' placeholder="' + ph + '" style="min-height:' + (h || 70) + 'px;font-size:13px;margin-top:6px">' + HS.esc(val || '') + '</textarea>'; };
+    if(kind === 'source') return '<div class="kind-edit">' +
+      ta('data-d="original"', d.original, '사료 원문 (한문 등, 없으면 비워 두세요) — 세로로 한 자씩 써집니다', 50) +
+      ta('data-d="translation"', d.translation, '번역 (한 줄씩 써지고, 자막 강조 말은 붉게 표시)', 70) +
+      '<input type="text" data-d="cite" value="' + HS.esc(d.cite || '') + '" placeholder="출처 (예: 선조실록 25년 4월 14일)" style="width:100%;margin-top:6px"></div>';
+    if(kind === 'timeline') return '<div class="kind-edit">' + ta('data-kindtext', HS.kindToText(s), '한 줄에 하나: 1592 | 임진왜란 발발 (8개까지)', 100) + '</div>';
+    if(kind === 'people') return '<div class="kind-edit">' + ta('data-kindtext', HS.kindToText(s), '인물, 한 줄에 하나: 이순신 | 삼도수군통제사 (6명까지)', 80) +
+      ta('data-links', HS.linksToText(s), '관계, 한 줄에 하나: 선조 > 이순신 : 임명', 60) + '</div>';
+    if(kind === 'compare') return '<div class="kind-edit"><div class="row" style="margin-top:6px"><input type="text" data-d="left" value="' + HS.esc(d.left || '') + '" placeholder="왼쪽 제목 (예: 조선)" style="flex:1"><input type="text" data-d="right" value="' + HS.esc(d.right || '') + '" placeholder="오른쪽 제목 (예: 일본)" style="flex:1"></div>' +
+      ta('data-kindtext', HS.kindToText(s), '한 줄에 하나: 병력 | 약 8만 | 약 16만 (6줄까지)', 90) + '</div>';
+    return '';
   }
   function renderVideo(){
     var p = P();
     fitCanvas();
     $('vid-scenes').innerHTML = p.scenes.length ? p.scenes.map(function(s, i){
-      var pic = s.useMap ? '<span class="pill">지도 장면</span>'
+      var kind = HS.sceneKind(s);
+      var pic = kind !== 'illust' ? '<span class="pill">' + HS.SCENE_KINDS[kind] + ' 장면</span>'
         : s.image ? '<img src="' + s.image + '" alt="" style="height:40px;border-radius:4px"><button class="btn" data-act="noimg">그림 빼기</button>'
         : s.svg ? '<span class="pill">AI 그림</span><button class="btn" data-act="nosvg">빼기</button>'
         : '<span class="pill">기본 배경</span>';
       var voice = s.audio ? '<span class="pill">목소리 ' + (s.audioDur || 0).toFixed(1) + '초</span><button class="btn" data-act="playvoice">듣기</button><button class="btn" data-act="novoice">빼기</button>'
         : '<button class="btn" data-act="rec">' + (recIdx === i ? '■ 녹음 끝내기' : '● 녹음') + '</button><label class="btn">파일<input type="file" accept="audio/*" data-act="audiofile" hidden></label><button class="btn" data-act="tts" title="브라우저가 읽어 줍니다 (미리 듣기만, 녹화에는 들어가지 않음)">읽어 듣기</button>';
       return '<div class="scene" data-i="' + i + '"><div class="row"><span class="num">#' + (i + 1) + '</span><b style="flex:1">' + HS.esc(s.heading) + '</b>' + pic + '</div>' +
-        '<div class="row small" style="margin-top:6px"><button class="btn" data-act="aidraw">' + (s.svg ? 'AI로 다시 그리기' : 'AI로 그리기') + '</button><label class="btn">그림 파일<input type="file" accept="image/*" data-act="img" hidden></label>' +
-        '<label class="inline"><input type="checkbox" data-act="usemap"' + (s.useMap ? ' checked' : '') + '> 지도 장면</label><span class="status" data-st></span></div>' +
+        '<div class="row small" style="margin-top:6px">장면 종류 <select data-act="kind">' + opts(HS.SCENE_KINDS, kind) + '</select>' +
+        (kind === 'illust' ? '<button class="btn" data-act="aidraw" title="Claude가 세 겹 SVG 그림을 그립니다">' + (s.svg ? 'AI로 다시 그리기' : 'AI로 그리기') + '</button>' +
+          (HS.imageOn() ? '<button class="btn" data-act="aiimage" title="' + HS.esc(HS.imageProviderName()) + '로 사진·그림풍 이미지를 만듭니다">' + (s.image ? 'AI 이미지 다시' : 'AI 이미지') + '</button>' : '') +
+          '<label class="btn">그림 파일<input type="file" accept="image/*" data-act="img" hidden></label>' : '') +
+        '<span class="status" data-st></span></div>' + kindEditor(s, kind) +
         '<div class="row small" style="margin-top:6px">목소리 ' + voice + '</div>' +
         '<div class="row small" style="margin-top:6px">카메라 <select data-k="motion">' + opts(MOTIONS, s.motion) + '</select> 분위기 <select data-k="mood">' + opts(MOODS, s.mood) + '</select> ' +
         '</div><div class="row small" style="margin-top:6px">캐릭터 <select data-act="char"><option value="">없음</option>' +
@@ -288,7 +306,7 @@
     var s = P().scenes[+box.dataset.i], act = e.target.dataset.act;
     if(e.target.dataset.k === 'dur'){ var v = parseFloat(e.target.value); s.dur = v > 0 ? v : null; HS.changed('scene'); renderVideo(); return; }
     if(e.target.dataset.k){ s[e.target.dataset.k] = e.target.value; HS.changed('scene'); renderVideo(); return; }
-    if(act === 'usemap'){ s.useMap = e.target.checked; HS.changed('scene'); renderVideo(); return; }
+    if(act === 'kind'){ HS.setSceneKind(s, e.target.value); HS.changed('scene'); renderVideo(); seekToScene(+box.dataset.i); return; }
     if(act === 'char'){ s.character = e.target.value ? { id: e.target.value, side: (s.character && s.character.side) || 'left' } : null; HS.changed('scene'); renderVideo(); return; }
     if(act === 'charside'){ s.character.side = e.target.value; HS.changed('scene'); renderVideo(); return; }
     if(act === 'img' && e.target.files[0]){
@@ -297,6 +315,17 @@
     if(act === 'audiofile' && e.target.files[0]){
       HS.readFile(e.target.files[0]).then(function(u){ return HS.setSceneAudio(s, u); }).then(renderVideo, function(err){ HS.toast(err.message); });
     }
+  });
+  // 장면 자료 고치기: 고치는 대로 그 장면의 다 된 모습을 미리보기에 보여 줍니다
+  function seekToScene(i){ var seg = HS.timeline()[i]; if(!seg) return; playT = seg.start + seg.dur * 0.85; $('vid-seek').value = playT; drawVideoAt(playT); drawTimeline(); }
+  $('vid-scenes').addEventListener('input', function(e){
+    var box = e.target.closest('.scene'); if(!box) return;
+    var i = +box.dataset.i, s = P().scenes[i], t = e.target;
+    if(t.dataset.d){ (s.data = s.data || {})[t.dataset.d] = t.value; }
+    else if(t.hasAttribute('data-kindtext')) HS.textToKind(s, t.value);
+    else if(t.hasAttribute('data-links')) HS.textToLinks(s, t.value);
+    else return;
+    HS.changed('scene'); seekToScene(i);
   });
   $('vid-scenes').addEventListener('click', function(e){
     var b = e.target.closest('button[data-act]'); if(!b) return;
@@ -319,6 +348,12 @@
       stopPlay();
       HS.recordVoice().then(function(stop){ recStop = stop; recIdx = i; renderVideo(); HS.toast('녹음 중입니다. 내레이션을 읽고 "녹음 끝내기"를 누르세요'); })
         .catch(function(err){ HS.toast(err.message || '마이크를 쓸 수 없습니다'); });
+      return;
+    }
+    else if(act === 'aiimage'){
+      b.disabled = true; st.textContent = HS.imageProviderName() + '로 만드는 중… (보통 10~40초)';
+      HS.drawSceneImage(i).then(function(){ st.textContent = ''; renderVideo(); seekToScene(i); })
+        .catch(function(err){ st.textContent = err.message; b.disabled = false; });
       return;
     }
     else if(act === 'aidraw'){
@@ -390,17 +425,19 @@
   HS.prompter = PR;
   $('vid-draw-all').addEventListener('click', function(){
     var btn = this;
-    if(!needAI('vid-status')) return;
-    var todo = P().scenes.map(function(s, i){ return (!s.image && !s.svg && !s.useMap) ? i : -1; }).filter(function(i){ return i >= 0; });
+    var useImg = HS.imageOn();
+    if(!useImg && !needAI('vid-status')) return;
+    var todo = P().scenes.map(function(s, i){ return (!s.image && !s.svg && HS.needsPicture(s)) ? i : -1; }).filter(function(i){ return i >= 0; });
     if(!todo.length){ status('vid-status', '그림이 없는 장면이 없습니다'); return; }
-    if(!confirm(todo.length + '개 장면을 Claude가 그립니다. 장면마다 1~2분, 비용은 장면당 대략 100~300원입니다. 할까요?')) return;
+    if(!confirm(useImg ? todo.length + '개 장면을 ' + HS.imageProviderName() + ' 이미지로 만듭니다. 장면마다 10~40초, 비용은 장면당 대략 ' + HS.imageCostWon() + '원입니다. 할까요?'
+      : todo.length + '개 장면을 Claude가 SVG 그림으로 그립니다. 장면마다 1~2분, 비용은 장면당 대략 100~300원입니다. 할까요?')) return;
     btn.disabled = true;
     var k = 0;
     (function next(){
       if(k >= todo.length){ btn.disabled = false; status('vid-status', todo.length + '개 장면을 그렸습니다'); return; }
       var i = todo[k++];
       status('vid-status', '#' + (i + 1) + ' 그리는 중 (' + k + '/' + todo.length + ')…');
-      aiDraw(i, function(m){ status('vid-status', '#' + (i + 1) + ' ' + m + ' (' + k + '/' + todo.length + ')'); })
+      (useImg ? HS.drawSceneImage(i).then(renderVideo) : aiDraw(i, function(m){ status('vid-status', '#' + (i + 1) + ' ' + m + ' (' + k + '/' + todo.length + ')'); }))
         .then(next, function(err){ btn.disabled = false; status('vid-status', '#' + (i + 1) + ': ' + HS.whyFail(err), true); });
     })();
   });
@@ -450,8 +487,8 @@
   });
   $('char-all').addEventListener('click', function(){
     var c = (P().characters || [])[0]; if(!c) return;
-    P().scenes.forEach(function(sc, i){ if(i > 0 && !sc.useMap) sc.character = { id: c.id, side: 'left' }; });
-    HS.changed('scenes'); renderVideo(); HS.toast('"' + c.name + '"을(를) 지도 장면을 뺀 모든 장면에 넣었습니다');
+    P().scenes.forEach(function(sc, i){ if(i > 0 && HS.needsPicture(sc)) sc.character = { id: c.id, side: 'left' }; });
+    HS.changed('scenes'); renderVideo(); HS.toast('"' + c.name + '"을(를) 삽화 장면마다 넣었습니다 (지도·사료·연표·관계도·비교표 장면은 뺌)');
   });
   function renderBgm(){
     var b = P().bgm;
@@ -745,6 +782,8 @@
   $('btn-undo').addEventListener('click', function(){ show('settings'); $('undo-list').scrollIntoView({ block: 'center' }); });
   function renderSettings(){
     renderUndo();
+    $('img-provider').value = HS.IMG.provider; $('img-key').value = HS.IMG.key; $('img-model').value = HS.IMG.model;
+    $('img-model').placeholder = HS.IMAGE_PROVIDERS[HS.IMG.provider] ? '기본: ' + HS.IMAGE_PROVIDERS[HS.IMG.provider].model : '모델 (비우면 기본)';
     $('cfg-key').value = HS.CFG.key; $('cfg-model').value = HS.CFG.model; $('cfg-format').value = HS.load('hs.format', 'mp4');
     $('cfg-cost').textContent = HS.cost.calls ? '지금까지 ' + HS.cost.calls + '번, 약 ' + Math.round(HS.cost.krw).toLocaleString() + '원 (어림).' : '';
   }
@@ -781,6 +820,11 @@
     HS.deleteProject(P().id).then(function(){ drawProjects(); render(current); });
   });
   $('proj-title').addEventListener('change', drawProjects);
+  $('img-provider').addEventListener('change', function(){ var p = HS.IMAGE_PROVIDERS[this.value]; $('img-model').placeholder = p ? '기본: ' + p.model : '모델 (비우면 기본)'; });
+  $('img-save').addEventListener('click', function(){
+    HS.saveImageSettings($('img-provider').value, $('img-key').value.trim(), $('img-model').value.trim());
+    HS.toast(HS.imageOn() ? HS.imageProviderName() + ' 이미지 생성을 켰습니다. ③ 삽화 영상 탭의 장면마다 "AI 이미지" 단추가 생깁니다' : 'AI 이미지 생성을 껐습니다');
+  });
   $('cfg-format').addEventListener('change', function(){ HS.save('hs.format', this.value); });
   $('proj-export').addEventListener('click', function(){
     // 백업에는 API 키를 넣지 않습니다 (프로젝트만)

@@ -8,6 +8,21 @@
   var MOODS = ['dawn', 'day', 'dusk', 'night', 'war', 'sea', 'court', 'snow'];
   var MOTIONS = ['zoomIn', 'zoomOut', 'panLeft', 'panRight'];
   var TRANSITIONS = ['fade', 'ink', 'wipe', 'cut'];
+  function arr(props){ return { type: 'array', items: { type: 'object', additionalProperties: false, required: Object.keys(props), properties: props } }; }
+  var STR = { type: 'string' };
+  // 장면 종류별 자료 (쓰지 않는 칸은 빈 값)
+  var DATA_SCHEMA = {
+    type: 'object', additionalProperties: false,
+    required: ['original', 'translation', 'cite', 'events', 'people', 'links', 'left', 'right', 'rows'],
+    properties: {
+      original: STR, translation: STR, cite: STR,
+      events: arr({ year: STR, label: STR }),
+      people: arr({ name: STR, role: STR }),
+      links: arr({ from: STR, to: STR, label: STR }),
+      left: STR, right: STR,
+      rows: arr({ label: STR, left: STR, right: STR })
+    }
+  };
 
   var SCHEMA = {
     type: 'object', additionalProperties: false,
@@ -16,7 +31,7 @@
       title: { type: 'string' },
       scenes: { type: 'array', items: {
         type: 'object', additionalProperties: false,
-        required: ['heading', 'narration', 'visual', 'prompt', 'mood', 'motion', 'use_map', 'caption', 'transition', 'keywords'],
+        required: ['heading', 'narration', 'visual', 'prompt', 'mood', 'motion', 'kind', 'data', 'caption', 'transition', 'keywords'],
         properties: {
           heading: { type: 'string' },
           narration: { type: 'string' },
@@ -24,7 +39,8 @@
           prompt: { type: 'string' },
           mood: { type: 'string', enum: MOODS },
           motion: { type: 'string', enum: MOTIONS },
-          use_map: { type: 'boolean' },
+          kind: { type: 'string', enum: ['illust', 'map', 'source', 'timeline', 'people', 'compare'] },
+          data: DATA_SCHEMA,
           caption: { type: 'string' },
           transition: { type: 'string', enum: TRANSITIONS },
           keywords: { type: 'array', items: { type: 'string' } }
@@ -75,7 +91,13 @@
       '  - caption: 화면 왼쪽 위에 띄울 짧은 이름표. "1592년 4월 · 부산"처럼 연도·장소, 또는 "이순신 (1545~1598)"처럼 처음 나오는 인물. 20자 이내, 없으면 빈 문자열.',
       '  - transition: 앞 장면에서 넘어오는 방식 fade(부드럽게)|ink(먹 번짐, 시대·분위기가 크게 바뀔 때)|wipe(붓으로 쓸기, 장소 이동)|cut(바로, 긴박한 장면). 대부분 fade.',
       '  - keywords: 자막에서 노랗게 강조할 핵심어 1~4개(인물·연도·장소·개념). narration 에 글자 그대로 들어 있는 말만.',
-      '  - use_map: 이 장면을 삽화 대신 지도(경로가 그려지는 모습)로 보여 주는 편이 좋으면 true. 전쟁의 진격로, 천도, 영토 변화 같은 장면. 영상 전체에서 1~3개.',
+      '  - kind: 장면 종류. 대부분 illust(삽화). 내용에 맞으면 아래 종류를 섞어 영상에 변화를 준다 (영상 전체에서 illust 가 아닌 장면은 3분의 1 이하).',
+      '      map: 진격로·피란·천도·영토 변화처럼 지도에 경로가 그려지는 장면.',
+      '      source: 사료를 보여 주는 장면. data.original 은 소스에 원문(한문 등)이 실제로 있을 때만 그대로 옮기고, 없으면 빈 문자열. data.translation 은 번역(소스의 번역문이 있으면 그대로), data.cite 는 출처(예: 선조실록 25년 4월).',
+      '      timeline: 사건이 여러 개 이어지는 장면. data.events 에 3~8개 {year:"1592", label:"짧은 설명"}.',
+      '      people: 인물들의 관계가 중요한 장면. data.people 2~6명 {name, role}, data.links {from, to, label} (from/to 는 people 의 name 과 같게).',
+      '      compare: 두 쪽을 견주는 장면 (예: 조선과 일본의 군사력). data.left/right 는 두 쪽 이름, data.rows 3~6줄 {label, left, right}.',
+      '    data 에서 그 종류가 쓰지 않는 칸은 빈 문자열·빈 배열로 둔다.',
       '- board: 칠판 판서 슬라이드 3~6장. lines 는 칠판에 쓸 짧은 줄들이다.',
       '  줄 앞 "-" 는 들여쓰기, "*" 는 노란 분필(핵심어·연도), "!" 는 분홍 분필(주의·반전), "[ ]" 로 감싸면 네모 칸, "→" 로 인과를 잇는다. 한 장에 8줄 이하.',
       '- map: 소스에 나오는 장소를 지도에 찍는다. lon/lat 는 십진수 경위도(동경·북위는 양수). kind 는 capital(수도)|city|battle(전투지).',
@@ -139,7 +161,7 @@
     var p = HS.project;
     p.title = p.title || d.title;
     p.scenes = d.scenes.map(function(s){
-      return { heading: s.heading, narration: s.narration, visual: s.visual, prompt: s.prompt, mood: s.mood, motion: s.motion, useMap: !!s.use_map, caption: s.caption || '', transition: s.transition || 'fade', keywords: (s.keywords || []).filter(function(k){ return k && s.narration.indexOf(k) >= 0; }), image: null };
+      return { heading: s.heading, narration: s.narration, visual: s.visual, prompt: s.prompt, mood: s.mood, motion: s.motion, kind: s.kind || (s.use_map ? 'map' : 'illust'), useMap: s.kind === 'map' || !!s.use_map, data: s.data || {}, caption: s.caption || '', transition: s.transition || 'fade', keywords: (s.keywords || []).filter(function(k){ return k && s.narration.indexOf(k) >= 0; }), image: null };
     });
     p.board = d.board.map(function(b){ return { title: b.title, text: b.lines.join('\n'), drawing: null }; });
     p.map = { title: d.map.title, view: null, places: d.map.places, routes: d.map.routes, regions: (d.map.regions || []).filter(function(r){ return r.points && r.points.length > 2; }) };
@@ -184,6 +206,12 @@
   }
   HS.findPlaces = findPlaces;
 
+  // 연표 한 줄: 연도를 떼고 첫 마디만, "물리쳤고" 같은 이음 끝은 "물리쳤다"로 맺습니다
+  function eventLabel(sent){
+    var t = sent.replace(/^[^\d]*?\d{3,4}년\s*(\d{1,2}월)?,?\s*/, '').split(/,\s|，/)[0].replace(/[.。]\s*$/, '').trim();
+    t = t.replace(/([었았였쳤했렸켰웠])(고|으며|며)$/, '$1다');
+    return t.length > 30 ? t.slice(0, 28) + '…' : t;
+  }
   // 간이 핵심어: 연도와 지명
   function keywordsOf(text){
     var k = (text.match(/\d{3,4}년/g) || []).concat(findPlaces(text).map(function(p){ return p.name; }).filter(function(n){ return text.indexOf(n) >= 0; }));
@@ -212,6 +240,14 @@
         mood: guessMood(text), motion: MOTIONS[scenes.length % MOTIONS.length], caption: captionOf(text), keywords: keywordsOf(text), image: null
       });
     }
+    // 연도가 셋 이상이면 끝에 연표 장면을 덧붙입니다
+    var evs = [];
+    scenes.forEach(function(sc){ (sc.narration.match(/[^.!?。]*\d{3,4}년[^.!?。]*/g) || []).forEach(function(sent){
+      var y = sent.match(/\d{3,4}/)[0];
+      if(!evs.some(function(e){ return e.year === y; })) evs.push({ year: y, label: eventLabel(sent) });
+    }); });
+    if(evs.length >= 3) scenes.push({ heading: title + ' 한눈에 보기', narration: '흐름을 정리해 보겠습니다. ' + evs.map(function(e){ return e.year + '년, ' + e.label + '.'; }).join(' '), visual: '연표', prompt: '',
+      mood: 'day', motion: 'zoomIn', kind: 'timeline', data: { events: evs.slice(0, 8) }, caption: '', keywords: evs.map(function(e){ return e.year + '년'; }).slice(0, 4), image: null });
     scenes.unshift({ heading: title, narration: '오늘은 ' + title + ' 이야기를 해 보겠습니다.', visual: '제목 화면', prompt: '', mood: 'dusk', motion: 'zoomIn', image: null });
     // 판서: 장면 두 개씩 한 장, 연도는 노란 분필
     var board = [{ title: title, text: scenes.slice(1).map(function(s){ return (/\d{3,4}년/.test(s.narration) ? '*' + s.narration.match(/\d{3,4}년/)[0] + ' ' : '') + s.heading; }).join('\n→ '), drawing: null }];
