@@ -72,4 +72,39 @@
     var count = 0; for(var i = 0; i < mask.length; i++) count += mask[i];
     return { cropped: layer.box ? layer.canvas.toDataURL('image/png') : null, ink: count / mask.length };
   };
+
+  // 그리는 모습: 분필 그림을 획 순서대로(획 기록이 없으면 위→아래로 쓸어내리며) 드러냅니다
+  // chalk: 투명 바탕의 온전한 분필 그림(원본과 같은 크기), strokes: [[[x,y],...], ...]
+  HS.drawChalkReveal = function(ctx, w, h, chalk, strokes, progress, bg){
+    if(bg !== 'none') HS.drawBoardBg(ctx, w, h, bg, 'chalk'); else ctx.clearRect(0, 0, w, h);
+    var mask = document.createElement('canvas'); mask.width = w; mask.height = h;
+    var m = mask.getContext('2d');
+    if(strokes && strokes.length){
+      var total = 0;
+      strokes.forEach(function(st){ total += Math.max(1, st.length - 1); });
+      var left = progress * total;
+      m.strokeStyle = '#000'; m.lineWidth = 26; m.lineCap = 'round'; m.lineJoin = 'round';
+      strokes.forEach(function(st){
+        if(left <= 0) return;
+        m.beginPath(); m.moveTo(st[0][0], st[0][1]);
+        if(st.length === 1){ m.lineTo(st[0][0] + 0.1, st[0][1]); left -= 1; }
+        for(var i = 1; i < st.length && left > 0; i++, left--) m.lineTo(st[i][0], st[i][1]);
+        m.stroke();
+      });
+    } else {
+      var edge = progress * (h + 80);
+      var g = m.createLinearGradient(0, edge - 80, 0, edge);
+      g.addColorStop(0, '#000'); g.addColorStop(1, 'rgba(0,0,0,0)');
+      m.fillStyle = g; m.fillRect(0, 0, w, edge);
+    }
+    m.globalCompositeOperation = 'source-in';
+    m.drawImage(chalk, 0, 0);
+    ctx.drawImage(mask, 0, 0);
+  };
+  // 원본 캔버스 → 온전한 분필 그림(투명 바탕, 원본 크기)
+  HS.chalkFull = function(srcCanvas, opt){
+    var c = document.createElement('canvas');
+    HS.convertToChalk(srcCanvas, c, { sens: opt.sens, color: opt.color, bg: 'none' });
+    return c;
+  };
 })();

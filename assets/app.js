@@ -20,15 +20,50 @@
       title: '',
       source: '',
       options: { length: 'mid', audience: '중고등학생', tone: '친근한 설명체' },
-      scenes: [],   // {heading, narration, visual, prompt, mood, motion, image}
-      board: [],    // {title, text, drawing}
-      map: { title: '', view: null, places: [], routes: [] } // places {name, lon, lat, kind}; routes {from, to, label}
+      scenes: [],   // {heading, narration, visual, prompt, mood, motion, image, svg, audio, audioDur}
+      board: [],    // {title, text, drawing, dw, dh}
+      map: { title: '', view: null, places: [], routes: [], regions: [] }, // places {name, lon, lat, kind}; routes {from, to, label}; regions {name, color, points}
+      checks: null  // 사실 확인 결과
     };
   };
-  HS.project = (function(){
-    try{ var p = JSON.parse(load('hs.project', 'null')); if(p && p.version) return p; }catch(e){}
-    return HS.blankProject();
-  })();
+  HS.project = HS.blankProject();
+
+  /* 프로젝트는 IndexedDB 에 둡니다 (그림·목소리까지 넉넉히 들어감). 쓸 수 없으면 localStorage 로 */
+  var DB = null;
+  function idb(){
+    if(DB) return DB;
+    DB = new Promise(function(ok, fail){
+      if(!window.indexedDB){ fail(new Error('no idb')); return; }
+      var rq = indexedDB.open('hs', 1);
+      rq.onupgradeneeded = function(){ rq.result.createObjectStore('kv'); };
+      rq.onsuccess = function(){ ok(rq.result); };
+      rq.onerror = function(){ fail(rq.error); };
+    });
+    return DB;
+  }
+  function idbGet(k){
+    return idb().then(function(db){ return new Promise(function(ok, fail){
+      var rq = db.transaction('kv').objectStore('kv').get(k);
+      rq.onsuccess = function(){ ok(rq.result); }; rq.onerror = function(){ fail(rq.error); };
+    }); });
+  }
+  function idbPut(k, v){
+    return idb().then(function(db){ return new Promise(function(ok, fail){
+      var tx = db.transaction('kv', 'readwrite'); tx.objectStore('kv').put(v, k);
+      tx.oncomplete = function(){ ok(); }; tx.onerror = function(){ fail(tx.error); };
+    }); });
+  }
+  function fill(p){
+    var b = HS.blankProject();
+    for(var k in b) if(p[k] === undefined) p[k] = b[k];
+    if(!p.map.regions) p.map.regions = [];
+    return p;
+  }
+  // 시작할 때 한 번 읽습니다. 다른 파일은 HS.ready 뒤에 화면을 그립니다
+  HS.ready = idbGet('project').catch(function(){ return null; }).then(function(p){
+    if(!p){ try{ p = JSON.parse(load('hs.project', 'null')); }catch(e){ p = null; } }
+    if(p && p.version) HS.project = fill(p);
+  });
 
   var saveTimer = null, listeners = [];
   HS.changed = function(what){
@@ -38,19 +73,22 @@
   };
   HS.onChange = function(fn){ listeners.push(fn); };
   HS.persist = function(){
-    if(!save('hs.project', JSON.stringify(HS.project))){
-      // 그림이 많으면 저장 한도를 넘을 수 있어, 그림을 뺀 채로라도 저장합니다
-      var lite = JSON.parse(JSON.stringify(HS.project));
-      lite.scenes.forEach(function(s){ s.image = null; });
-      lite.board.forEach(function(b){ b.drawing = null; });
-      save('hs.project', JSON.stringify(lite));
-      HS.toast && HS.toast('그림이 커서 브라우저 저장소에는 그림을 빼고 저장했습니다. 백업(.json)으로 보관하세요.');
-    }
+    clearTimeout(saveTimer);
+    var snap = JSON.parse(JSON.stringify(HS.project));
+    return idbPut('project', snap).then(function(){
+      try{ localStorage.removeItem('hs.project'); }catch(e){}
+    }).catch(function(){
+      if(!save('hs.project', JSON.stringify(snap))){
+        // 그림이 많으면 저장 한도를 넘을 수 있어, 그림·목소리를 뺀 채로라도 저장합니다
+        snap.scenes.forEach(function(s){ s.image = null; s.audio = null; s.svg = null; });
+        snap.board.forEach(function(b){ b.drawing = null; });
+        save('hs.project', JSON.stringify(snap));
+        HS.toast && HS.toast('브라우저 저장소가 작아 그림·목소리를 빼고 저장했습니다. 백업(.json)으로 보관하세요.');
+      }
+    });
   };
   HS.setProject = function(p){
-    var b = HS.blankProject();
-    for(var k in b) if(p[k] === undefined) p[k] = b[k];
-    HS.project = p;
+    HS.project = fill(p);
     HS.changed('all');
   };
 

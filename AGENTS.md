@@ -20,7 +20,7 @@ This repo was started from the same author's 어전회의 (eojeon) project and f
 ## Test (run before every commit)
 ```
 npm install
-npm test          # node tests/e2e.mjs — 12 Playwright tests, Claude API is mocked (SSE)
+npm test          # node tests/e2e.mjs — 21 Playwright tests, Claude API is mocked (SSE, routed by system prompt)
 ```
 `CHROMIUM_PATH=/path/to/chromium npm test` uses a specific browser.
 Headless Chromium renames non-ASCII download names to `download`; tests read the name
@@ -30,13 +30,15 @@ the app chose by wrapping `HS.download`.
 | Path | Role |
 |---|---|
 | `index.html` | Layout, all CSS, tab markup; script order matters (see bottom of file) |
-| `assets/app.js` | `window.HS` namespace: project state + autosave (`hs.project`), utils, `HS.callClaude` |
-| `assets/scriptgen.js` | Source → script. `HS.generateAI` (schema `HS.SCRIPT_SCHEMA`) and offline `HS.generateSimple` |
-| `assets/board.js` | Board line syntax (`HS.parseBoardLine`), chalkboard background, `HS.drawBoardSlide` |
+| `assets/app.js` | `window.HS` namespace: project state + autosave to IndexedDB (`hs` db, `kv` store, key `project`; localStorage fallback), `HS.ready`, utils, `HS.callClaude` |
+| `assets/scriptgen.js` | Source → script. `HS.generateAI` (schema `HS.SCRIPT_SCHEMA`), offline `HS.generateSimple`, `HS.rewriteScene`, `HS.factCheck` |
+| `assets/board.js` | Board line syntax (`HS.parseBoardLine`), chalkboard background, `HS.drawBoardSlide` (with `progress` for the writing animation), `HS.boardChars` |
 | `assets/scene-art.js` | Procedural mood backgrounds for scenes without an image (`HS.drawSceneArt`) |
-| `assets/video.js` | Timeline, Ken Burns + crossfade + subtitles (`HS.drawVideoFrame`), `HS.recordCanvas` (MediaRecorder → WebM) |
-| `assets/map.js` | Equirectangular map on Natural Earth coastlines, places, animated route arrows (`HS.drawMap`) |
-| `assets/chalk.js` | Adaptive-threshold ink extraction + chalk texture (`HS.convertToChalk`) |
+| `assets/ai-art.js` | Claude-drawn SVG illustrations in 3 layers (`far/mid/near`) for parallax; `HS.cleanSvg` sanitizes (no script/image/text/external refs) |
+| `assets/voice.js` | Per-scene narration audio (mic via MediaRecorder or file), `HS.playNarration` schedules it on the timeline (speakers or a MediaStream destination for recording) |
+| `assets/video.js` | Timeline (voice length drives scene length), Ken Burns / SVG parallax / map scenes + crossfade + subtitles (`HS.drawVideoFrame`), `HS.recordCanvas` (MediaRecorder → WebM, optional audio) |
+| `assets/map.js` | Equirectangular map on Natural Earth coastlines, regions (shaded polygons), places, animated route arrows (`HS.drawMap`, `HS.mapView`, `HS.mapUnproject`) |
+| `assets/chalk.js` | Adaptive-threshold ink extraction + chalk texture (`HS.convertToChalk`), drawing-reveal animation (`HS.drawChalkReveal`) |
 | `assets/export.js` | PPTX export via PptxGenJS: `HS.exportStoryPptx`, `HS.exportBoardPptx` |
 | `assets/ui.js` | Wires tabs, inputs and buttons |
 | `content/places.js` | Gazetteer (name, aliases, lon/lat, kind) used by offline map extraction — extend freely |
@@ -47,13 +49,18 @@ the app chose by wrapping `HS.download`.
 | `tools/screens.mjs` | Regenerates `docs/*.png` for README |
 | `tests/e2e.mjs` | Playwright tests |
 
-## Data model (`HS.project`, saved to `localStorage['hs.project']`, exported as backup JSON)
+## Data model (`HS.project`, saved to IndexedDB, exported as backup JSON)
 ```
-{ version, title, source, options:{length,audience,tone},
-  scenes:[{heading, narration, visual, prompt, mood, motion, image(dataURL|null)}],
+{ version, title, source, options:{length,audience,tone}, mapStyle,
+  scenes:[{heading, narration, visual, prompt, mood, motion, useMap,
+           image(dataURL|null), svg(string|null), audio(dataURL|null), audioDur}],
   board:[{title, text, drawing(dataURL|null), dw, dh}],
-  map:{title, view([lon0,lat0,lon1,lat1]|null=auto), places:[{name,lon,lat,kind}], routes:[{from,to,label}]} }
+  map:{title, view([lon0,lat0,lon1,lat1]|null=auto), places:[{name,lon,lat,kind}], routes:[{from,to,label}],
+       regions:[{name,color,points:[[lon,lat],...]}]},
+  checks:{at, summary, items:[{scene(1-based), claim, verdict(ok|unsupported|wrong|debated), note, quote}]}|null }
 ```
+Scene picture priority: `useMap` → `image` → `svg` → procedural background.
+Startup is async: wait for `HS.ready` (the UI sets `body[data-ready]` when done).
 mood ∈ dawn|day|dusk|night|war|sea|court|snow, motion ∈ zoomIn|zoomOut|panLeft|panRight,
 kind ∈ capital|city|battle. Keep `HS.SCRIPT_SCHEMA` in sync when changing fields.
 
@@ -65,10 +72,8 @@ kind ∈ capital|city|battle. Keep `HS.SCRIPT_SCHEMA` in sync when changing fiel
 - After visual changes, look at screenshots (`node tools/screens.mjs`), not just the tests.
 
 ## Ideas / next steps
-- AI illustration: call an image-generation API with each scene's `prompt`, or generate SVG
-  illustrations with Claude; parallax layers (foreground/background split) for more motion.
-- Narration audio: TTS per scene and mux into the WebM (Web Speech cannot be recorded; needs an API).
-- Map: historical borders per era (GeoJSON layers), region shading, per-scene map shots in the video.
-- Board: step-by-step "writing" animation video of the board slides.
-- Hand drawing: stroke smoothing / vectorizing so drawings can be animated as if drawn in chalk.
-- Scene-level regeneration with Claude (rewrite one scene, shorten, change tone), fact-check pass with citations.
+- Raster image generation via an external image API (needs another provider key) as an alternative to SVG art.
+- Cloud TTS (e.g. a Korean TTS API) so narration can be generated instead of recorded.
+- Prepared historical-border datasets per era instead of hand-drawn/AI-approximated regions.
+- Photo drawings: vectorize (skeleton → strokes) so they animate stroke by stroke like pad drawings.
+- MP4 export (WebM → MP4 needs ffmpeg.wasm; large download).

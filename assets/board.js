@@ -53,7 +53,9 @@
   };
 
   // 분필 글씨: 조금씩 어긋나게 여러 번 칠해 거친 결을 냅니다
-  function chalkText(ctx, text, x, y, color, r){
+  function chalkText(ctx, text, x, y, color){
+    // 긁힘 무늬는 글자와 자리로 고정합니다 (쓰는 영상에서 앞 글자가 떨리지 않게)
+    var r = HS.rng(text + '|' + Math.round(x) + '|' + Math.round(y));
     ctx.fillStyle = color;
     ctx.globalAlpha = 0.9; ctx.fillText(text, x, y);
     ctx.globalAlpha = 0.25; ctx.fillText(text, x + 0.8, y + 0.6);
@@ -67,9 +69,18 @@
   }
   HS.chalkText = chalkText;
 
+  function bodyLines(slide){ return String(slide.text || '').split('\n').filter(function(l){ return l.trim(); }); }
+  // 한 장에 쓰는 글자 수 (그림은 25자 몫으로 칩니다) — 쓰는 영상의 길이를 정할 때 씁니다
+  HS.boardChars = function(slide, hasDrawing){
+    return (slide.title || '').length + bodyLines(slide).reduce(function(a, l){ return a + HS.parseBoardLine(l).text.length; }, 0) + (hasDrawing ? 25 : 0);
+  };
+
   // 판서 한 장을 그립니다. slide = {title, text, drawing}, drawingImg 는 미리 읽어 둔 Image
+  // opts.progress(0~1) 를 주면 그만큼만 써진 모습(분필로 써 나가는 영상)을 그립니다
   HS.drawBoardSlide = function(ctx, w, h, slide, drawingImg, opts){
     opts = opts || {};
+    var budget = opts.progress == null ? Infinity : opts.progress * HS.boardChars(slide, !!drawingImg);
+    function take(n){ var k = Math.max(0, Math.min(n, Math.floor(budget))); budget -= n; return k; }
     var r = HS.rng('chalk' + (slide.title || '') + (slide.text || ''));
     // 바탕은 새 캔버스에 그린 뒤 얹습니다 (글씨의 긁힘이 바탕까지 지우지 않게)
     HS.drawBoardBg(ctx, w, h, opts.bg, slide.title);
@@ -79,42 +90,51 @@
     var pad = 70 * u, textW = drawingImg ? w * 0.58 : w - pad * 2;
     // 제목과 밑줄
     c.font = 'bold ' + Math.round(68 * u) + 'px ' + getComputedStyle(document.body).getPropertyValue('--pen');
-    var tw = chalkText(c, slide.title || '', pad, 110 * u, CHALK.white, r);
-    c.strokeStyle = CHALK.white; c.globalAlpha = 0.8; c.lineWidth = 3 * u; c.lineCap = 'round';
-    c.beginPath(); c.moveTo(pad - 6 * u, 128 * u);
-    for(var x = pad; x < pad + tw + 20 * u; x += 30 * u) c.lineTo(x, 128 * u + (r() - 0.5) * 4 * u);
-    c.stroke(); c.globalAlpha = 1;
+    var title = slide.title || '', tn = take(title.length);
+    var tw = chalkText(c, title.slice(0, tn), pad, 110 * u, CHALK.white);
+    if(tn === title.length && title){
+      c.strokeStyle = CHALK.white; c.globalAlpha = 0.8; c.lineWidth = 3 * u; c.lineCap = 'round';
+      c.beginPath(); c.moveTo(pad - 6 * u, 128 * u);
+      for(var x = pad; x < pad + tw + 20 * u; x += 30 * u) c.lineTo(x, 128 * u + (r() - 0.5) * 4 * u);
+      c.stroke(); c.globalAlpha = 1;
+    }
     // 본문 줄
     var y = 200 * u, size = 46 * u;
-    var lines = String(slide.text || '').split('\n').filter(function(l){ return l.trim(); });
+    var lines = bodyLines(slide);
     if(lines.length > 9) size = 46 * u * 9 / lines.length;
     c.font = Math.round(size) + 'px ' + getComputedStyle(document.body).getPropertyValue('--pen');
     lines.forEach(function(raw){
       var L = HS.parseBoardLine(raw), x0 = pad + L.indent * 44 * u, xx = x0;
-      if(!L.indent && !L.box && !/^→/.test(L.text)){ // 글머리 점
+      var n = take(L.text.length), started = n > 0;
+      if(started && !L.indent && !L.box && !/^→/.test(L.text)){ // 글머리 점
         c.fillStyle = CHALK[L.color]; c.globalAlpha = 0.9;
         c.beginPath(); c.arc(x0 + 8 * u, y - size * 0.32, 5 * u, 0, Math.PI * 2); c.fill(); c.globalAlpha = 1;
         xx += 28 * u;
       }
       var wrapped = HS.wrap(c, L.text, textW - (xx - pad));
-      if(L.box){
+      if(L.box && started){
         var bw = Math.min(textW, c.measureText(L.text).width + 30 * u);
         c.strokeStyle = CHALK[L.color]; c.lineWidth = 2.5 * u; c.globalAlpha = 0.85;
         c.strokeRect(xx - 12 * u, y - size * 0.95, bw, size * 1.3 * wrapped.length); c.globalAlpha = 1;
       }
       wrapped.forEach(function(line, i){
+        var m = Math.min(line.length, n); n -= m;
         if(i === 0 && L.parts.length > 1 && wrapped.length === 1){
-          var px = xx;
-          L.parts.forEach(function(pt){ px += chalkText(c, pt.t, px, y, CHALK[pt.c], r); });
-        } else chalkText(c, line, xx, y, CHALK[L.color], r);
+          var px = xx, left = m;
+          L.parts.forEach(function(pt){ var q = Math.min(pt.t.length, left); left -= q; if(q) px += chalkText(c, pt.t.slice(0, q), px, y, CHALK[pt.c]); });
+        } else if(m) chalkText(c, line.slice(0, m), xx, y, CHALK[L.color]);
         y += size * 1.3;
       });
       y += size * 0.25;
     });
     if(drawingImg){
       var bx = w * 0.62, by = 150 * u, bw2 = w * 0.34, bh = h - by - 60 * u;
-      var s = Math.min(bw2 / drawingImg.width, bh / drawingImg.height);
-      c.drawImage(drawingImg, bx + (bw2 - drawingImg.width * s) / 2, by + (bh - drawingImg.height * s) / 2, drawingImg.width * s, drawingImg.height * s);
+      var s = Math.min(bw2 / drawingImg.width, bh / drawingImg.height), show = budget === Infinity ? 1 : Math.max(0, Math.min(1, budget / 25));
+      var dw = drawingImg.width * s, dh = drawingImg.height * s, dx = bx + (bw2 - dw) / 2, dy = by + (bh - dh) / 2;
+      if(show > 0){ // 위에서부터 차례로 드러납니다
+        c.save(); c.beginPath(); c.rect(dx, dy, dw, dh * show); c.clip();
+        c.drawImage(drawingImg, dx, dy, dw, dh); c.restore();
+      }
     }
     ctx.drawImage(layer, 0, 0);
   };

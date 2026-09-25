@@ -29,6 +29,19 @@
     return [lon0, lat0, lon1, lat1];
   };
 
+  // 지명과 영역이 다 들어오는 보기 범위 (사용자가 정해 둔 범위가 있으면 그것)
+  HS.mapView = function(map, w, h){
+    if(map.view) return map.view;
+    var pts = map.places.slice();
+    (map.regions || []).forEach(function(r){ r.points.forEach(function(q){ pts.push({ lon: q[0], lat: q[1] }); }); });
+    return HS.fitMapView(pts, w / h);
+  };
+  // 캔버스 좌표 → 경위도
+  HS.mapUnproject = function(map, w, h, x, y){
+    var v = HS.mapView(map, w, h);
+    return [Math.round((v[0] + x / w * (v[2] - v[0])) * 100) / 100, Math.round((v[3] - y / h * (v[3] - v[1])) * 100) / 100];
+  };
+
   function projector(view, w, h){
     return function(lon, lat){ return [(lon - view[0]) / (view[2] - view[0]) * w, (view[3] - lat) / (view[3] - view[1]) * h]; };
   }
@@ -64,7 +77,7 @@
   HS.drawMap = function(ctx, w, h, map, opt){
     opt = opt || {};
     var st = STYLE[opt.style] || STYLE.old, u = w / 1280;
-    var view = map.view || HS.fitMapView(map.places, w / h), P = projector(view, w, h);
+    var view = HS.mapView(map, w, h), P = projector(view, w, h);
     var prog = opt.progress == null ? 1 : opt.progress;
     if(opt.style === 'board') HS.drawBoardBg(ctx, w, h, 'board', 'map');
     else {
@@ -80,6 +93,31 @@
       for(var la = Math.ceil(view[1] / 5) * 5; la < view[3]; la += 5){ var b = P(0, la); ctx.beginPath(); ctx.moveTo(0, b[1]); ctx.lineTo(w, b[1]); ctx.stroke(); }
       ctx.globalAlpha = 1;
     }
+    // 영역 (나라의 대략적인 판도, 점령지 등) — 반투명 칠과 이름
+    (map.regions || []).concat(opt.draft ? [opt.draft] : []).forEach(function(rg){
+      if(!rg.points || !rg.points.length) return;
+      var col = rg.color || '#b8322a';
+      ctx.save();
+      ctx.beginPath();
+      rg.points.forEach(function(q, i){ var a = P(q[0], q[1]); i ? ctx.lineTo(a[0], a[1]) : ctx.moveTo(a[0], a[1]); });
+      if(rg !== opt.draft) ctx.closePath();
+      ctx.globalAlpha = Math.min(1, prog * 3) * (opt.style === 'board' ? 0.22 : 0.28);
+      ctx.fillStyle = col; if(rg !== opt.draft) ctx.fill();
+      ctx.globalAlpha = Math.min(1, prog * 3) * 0.9;
+      ctx.strokeStyle = col; ctx.lineWidth = 3 * u; ctx.setLineDash([10 * u, 6 * u]); ctx.stroke(); ctx.setLineDash([]);
+      if(rg === opt.draft) rg.points.forEach(function(q){ var a = P(q[0], q[1]); ctx.fillStyle = col; ctx.fillRect(a[0] - 4 * u, a[1] - 4 * u, 8 * u, 8 * u); });
+      ctx.restore();
+      if(rg.name && rg !== opt.draft){
+        var cx = 0, cy = 0;
+        rg.points.forEach(function(q){ cx += q[0]; cy += q[1]; });
+        var c = P(cx / rg.points.length, cy / rg.points.length);
+        ctx.globalAlpha = Math.min(1, prog * 3);
+        ctx.font = 'bold ' + Math.round(38 * u) + 'px ' + st.font;
+        var tw = ctx.measureText(rg.name).width;
+        label(ctx, rg.name, c[0] - tw / 2, c[1], 38 * u, st, col);
+        ctx.globalAlpha = 1;
+      }
+    });
     var byName = {};
     map.places.forEach(function(p){ byName[p.name] = p; });
     // 경로 (차례대로 그려짐)

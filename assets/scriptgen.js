@@ -15,14 +15,15 @@
       title: { type: 'string' },
       scenes: { type: 'array', items: {
         type: 'object', additionalProperties: false,
-        required: ['heading', 'narration', 'visual', 'prompt', 'mood', 'motion'],
+        required: ['heading', 'narration', 'visual', 'prompt', 'mood', 'motion', 'use_map'],
         properties: {
           heading: { type: 'string' },
           narration: { type: 'string' },
           visual: { type: 'string' },
           prompt: { type: 'string' },
           mood: { type: 'string', enum: MOODS },
-          motion: { type: 'string', enum: MOTIONS }
+          motion: { type: 'string', enum: MOTIONS },
+          use_map: { type: 'boolean' }
         } } },
       board: { type: 'array', items: {
         type: 'object', additionalProperties: false,
@@ -30,7 +31,7 @@
         properties: { title: { type: 'string' }, lines: { type: 'array', items: { type: 'string' } } } } },
       map: {
         type: 'object', additionalProperties: false,
-        required: ['title', 'places', 'routes'],
+        required: ['title', 'places', 'routes', 'regions'],
         properties: {
           title: { type: 'string' },
           places: { type: 'array', items: {
@@ -40,7 +41,11 @@
           routes: { type: 'array', items: {
             type: 'object', additionalProperties: false,
             required: ['from', 'to', 'label'],
-            properties: { from: { type: 'string' }, to: { type: 'string' }, label: { type: 'string' } } } }
+            properties: { from: { type: 'string' }, to: { type: 'string' }, label: { type: 'string' } } } },
+          regions: { type: 'array', items: {
+            type: 'object', additionalProperties: false,
+            required: ['name', 'color', 'points'],
+            properties: { name: { type: 'string' }, color: { type: 'string' }, points: { type: 'array', items: { type: 'array', items: { type: 'number' } } } } } }
         } }
     }
   };
@@ -63,10 +68,13 @@
       '  - prompt: 이미지 생성 도구에 넣을 영어 프롬프트. 시대 고증(복식, 건축, 무기)을 구체적으로, 스타일은 "Korean history webtoon illustration, soft painterly" 로 통일하고, 글자나 워터마크를 넣지 말라고 적는다.',
       '  - mood: ' + MOODS.join('|') + ' 가운데 하나.',
       '  - motion: 카메라 움직임 ' + MOTIONS.join('|') + ' 가운데 하나. 이웃 장면끼리 겹치지 않게.',
+      '  - use_map: 이 장면을 삽화 대신 지도(경로가 그려지는 모습)로 보여 주는 편이 좋으면 true. 전쟁의 진격로, 천도, 영토 변화 같은 장면. 영상 전체에서 1~3개.',
       '- board: 칠판 판서 슬라이드 3~6장. lines 는 칠판에 쓸 짧은 줄들이다.',
       '  줄 앞 "-" 는 들여쓰기, "*" 는 노란 분필(핵심어·연도), "!" 는 분홍 분필(주의·반전), "[ ]" 로 감싸면 네모 칸, "→" 로 인과를 잇는다. 한 장에 8줄 이하.',
       '- map: 소스에 나오는 장소를 지도에 찍는다. lon/lat 는 십진수 경위도(동경·북위는 양수). kind 는 capital(수도)|city|battle(전투지).',
-      '  routes 는 이동·진격·피란 경로를 순서대로 from/to(places 의 name 과 같게)와 짧은 label 로 적는다. 장소가 없으면 빈 배열.'
+      '  routes 는 이동·진격·피란 경로를 순서대로 from/to(places 의 name 과 같게)와 짧은 label 로 적는다. 장소가 없으면 빈 배열.',
+      '  regions 는 그 시기 나라의 대략적인 판도나 점령지를 반투명하게 칠할 영역이다. points 는 [경도, 위도] 10~24개로 둘레를 시계 방향으로 잇는다.',
+      '  바다를 크게 가로지르지 않게 해안을 따라 잡고, name 에는 "고구려(5세기, 대략)"처럼 시기와 "대략"을 적는다. color 는 "#b8322a" 같은 6자리 색. 필요 없으면 빈 배열.'
     ].join('\n');
   }
 
@@ -82,10 +90,11 @@
     var p = HS.project;
     p.title = p.title || d.title;
     p.scenes = d.scenes.map(function(s){
-      return { heading: s.heading, narration: s.narration, visual: s.visual, prompt: s.prompt, mood: s.mood, motion: s.motion, image: null };
+      return { heading: s.heading, narration: s.narration, visual: s.visual, prompt: s.prompt, mood: s.mood, motion: s.motion, useMap: !!s.use_map, image: null };
     });
     p.board = d.board.map(function(b){ return { title: b.title, text: b.lines.join('\n'), drawing: null }; });
-    p.map = { title: d.map.title, view: null, places: d.map.places, routes: d.map.routes };
+    p.map = { title: d.map.title, view: null, places: d.map.places, routes: d.map.routes, regions: (d.map.regions || []).filter(function(r){ return r.points && r.points.length > 2; }) };
+    p.checks = null;
     HS.changed('all');
   }
   HS.applyScriptResult = applyResult;
@@ -161,7 +170,8 @@
     p.title = p.title || title;
     p.scenes = scenes;
     p.board = board;
-    p.map = { title: title, view: null, places: places, routes: routes };
+    p.map = { title: title, view: null, places: places, routes: routes, regions: [] };
+    p.checks = null;
     HS.changed('all');
   };
 
@@ -170,5 +180,68 @@
     return [p.title, ''].concat(p.scenes.map(function(s, i){
       return '#' + (i + 1) + ' ' + s.heading + '\n[화면] ' + s.visual + '\n[내레이션] ' + s.narration + (s.prompt ? '\n[이미지 프롬프트] ' + s.prompt : '');
     })).join('\n\n');
+  };
+
+  /* ── 장면 하나만 AI로 고치기 ───────────────────────────── */
+  var SCENE_SCHEMA = {
+    type: 'object', additionalProperties: false,
+    required: ['heading', 'narration', 'visual', 'prompt'],
+    properties: { heading: { type: 'string' }, narration: { type: 'string' }, visual: { type: 'string' }, prompt: { type: 'string' } }
+  };
+  HS.REWRITES = {
+    short: '내레이션을 지금의 절반 길이로 줄여 주세요. 핵심 사실은 남기세요.',
+    easy: '중학생도 알아듣게 쉬운 말로 풀어 주세요. 어려운 한자어는 뜻을 곁들이세요.',
+    drama: '이야기꾼처럼 더 긴장감 있게 써 주세요. 사실은 바꾸지 마세요.',
+    quote: '소스에 있는 사료 구절을 한 문장 인용해 넣어 주세요. 소스에 사료가 없으면 인용하지 말고 그대로 두세요.',
+    hook: '시청자가 계속 보고 싶어지게 질문으로 시작해 주세요.'
+  };
+  HS.rewriteScene = function(i, instruction){
+    var p = HS.project, s = p.scenes[i];
+    var outline = p.scenes.map(function(x, k){ return (k === i ? '▶ ' : '  ') + (k + 1) + '. ' + x.heading; }).join('\n');
+    var sys = systemPrompt(p.options) + '\n\n지금은 대본 전체가 아니라 장면 하나만 고친다. 앞뒤 장면과 이어지게 하고, 출력은 heading/narration/visual/prompt 만.';
+    var msg = '<source>\n' + p.source + '\n</source>\n\n대본 차례:\n' + outline + '\n\n고칠 장면 (' + (i + 1) + '번):\n' +
+      JSON.stringify({ heading: s.heading, narration: s.narration, visual: s.visual, prompt: s.prompt }, null, 1) + '\n\n요청: ' + instruction;
+    return HS.callClaude(sys, [{ role: 'user', content: msg }], SCENE_SCHEMA, null, 'medium').then(function(r){
+      var d = r.data;
+      s.heading = d.heading; s.narration = d.narration; s.visual = d.visual; s.prompt = d.prompt;
+      HS.changed('scene');
+      return d;
+    });
+  };
+
+  /* ── 사실 확인: 대본의 주장을 소스와 맞대어 봅니다 ─────────────── */
+  var CHECK_SCHEMA = {
+    type: 'object', additionalProperties: false,
+    required: ['summary', 'items'],
+    properties: {
+      summary: { type: 'string' },
+      items: { type: 'array', items: {
+        type: 'object', additionalProperties: false,
+        required: ['scene', 'claim', 'verdict', 'note', 'quote'],
+        properties: {
+          scene: { type: 'integer' }, claim: { type: 'string' },
+          verdict: { type: 'string', enum: ['ok', 'unsupported', 'wrong', 'debated'] },
+          note: { type: 'string' }, quote: { type: 'string' }
+        } } }
+    }
+  };
+  HS.VERDICT = { ok: '소스와 맞음', unsupported: '소스에 없음', wrong: '소스와 다름', debated: '해석이 갈림' };
+  HS.factCheck = function(){
+    var p = HS.project;
+    var sys = [
+      '너는 역사 교육 콘텐츠의 사실 확인 담당이다. 영상 대본의 사실 주장(인물·연도·장소·숫자·인과)을 하나씩 뽑아 소스와 맞대어 본다.',
+      '- verdict: ok(소스가 뒷받침), unsupported(소스에 근거 없음 — 일반 상식이어도 소스에 없으면 여기), wrong(소스와 어긋남), debated(학계 해석이 갈리는 표현).',
+      '- quote: 근거가 되는 소스 구절을 그대로 옮긴다. 없으면 빈 문자열.',
+      '- note: 무엇을 어떻게 고치면 좋을지 한 문장. ok 면 빈 문자열이어도 된다.',
+      '- scene: 장면 번호(1부터).',
+      '- 문제가 되는 주장을 빠짐없이 싣고, ok 인 주장은 중요한 것만 싣는다.',
+      '- summary: 전체 평가 두세 문장.'
+    ].join('\n');
+    var script = p.scenes.map(function(s, k){ return '[' + (k + 1) + '] ' + s.heading + '\n' + s.narration; }).join('\n\n');
+    return HS.callClaude(sys, [{ role: 'user', content: '<source>\n' + p.source + '\n</source>\n\n<script>\n' + script + '\n</script>' }], CHECK_SCHEMA, null, 'high').then(function(r){
+      p.checks = { at: new Date().toISOString(), summary: r.data.summary, items: r.data.items };
+      HS.changed('checks');
+      return p.checks;
+    });
   };
 })();

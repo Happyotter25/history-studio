@@ -10,8 +10,10 @@
 
   // 장면 한 컷 (그림이 있으면 그림, 없으면 분위기 배경)
   HS.sceneStill = function(scene, w, h){
-    var c = canvas(w, h), ctx = c.getContext('2d'), img = HS.sceneImage(scene);
-    if(img){
+    var c = canvas(w, h), ctx = c.getContext('2d'), img = HS.sceneImage(scene), layers = !img && HS.sceneLayers(scene);
+    if(scene.useMap && HS.project.map.places.length) HS.drawMap(ctx, w, h, HS.project.map, { style: HS.project.mapStyle || 'old' });
+    else if(layers) HS.drawLayers(ctx, w, h, layers, 'zoomIn', 0);
+    else if(img){
       var s = Math.max(w / img.width, h / img.height);
       ctx.drawImage(img, (w - img.width * s) / 2, (h - img.height * s) / 2, img.width * s, img.height * s);
     } else HS.drawSceneArt(ctx, w, h, scene, 0);
