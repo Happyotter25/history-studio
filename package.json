@@ -7,7 +7,9 @@
     "check": "node tools/check.mjs",
     "test": "node tests/e2e.mjs",
     "vendor": "node tools/vendor.mjs",
-    "screens": "node tools/screens.mjs"
+    "screens": "node tools/screens.mjs",
+    "start": "node tools/studio-server.mjs",
+    "test:cli": "node --test tests/cli-server.mjs"
   },
   "devDependencies": {
     "playwright": "1.56.1",

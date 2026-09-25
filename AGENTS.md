@@ -26,7 +26,7 @@ Never rewrite older entries; correct them in a new entry.
 ## What this is
 A static web app that helps a Korean high-school history teacher make history YouTube videos.
 Primary workflow: finished narration → editable material proposal → explicit user confirmation →
-subscription image order/import, separate illustration/map/quote/comparison/board PNG ZIPs, story PPTX and board PPTX.
+local Codex CLI generation/preview or subscription image order/import, separate illustration/map/quote/comparison/board PNG ZIPs, story PPTX and board PPTX.
 The user prefers Codex/ChatGPT subscriptions, not paid API automation. Do not rewrite finished narration or generate
 all illustrations before the proposal is confirmed. Video rendering is a secondary legacy tool.
 General proposals use local paragraph/quote/place rules, not AI reasoning; the provided Myeongnyang script has a curated example plan.
@@ -35,7 +35,7 @@ Talk to the user in Korean. They prefer you to proceed without asking many quest
 This repo was started from the same author's 어전회의 (eojeon) project and follows its conventions.
 
 ## Run
-- Open `index.html` directly in a browser (works from `file://`). No server, no build step.
+- Open `index.html` directly in a browser (works from `file://`). No build step. Local CLI image generation uses the optional server described below.
 - Optional AI mode: the user pastes an Anthropic API key in 설정. It is stored only in
   `localStorage` (`hs.key`) and is never written to project backups.
   Calls use the vendored Anthropic JS SDK (`assets/vendor/anthropic-sdk.js`, `window.AnthropicSDK`),
@@ -134,3 +134,9 @@ Drawing code sizes things by `Math.min(w, h) / 720` so the same code serves 16:9
 - Photo drawings: vectorize (skeleton → strokes) so they animate stroke by stroke like pad drawings.
 - MP4 is recorded natively when `MediaRecorder` supports it (setting `hs.format`); otherwise WebM. A WebM→MP4 converter would need ffmpeg.wasm (large).
 - Thumbnail: face/character cut-outs, more layouts, A/B variants.
+
+## Local Codex image bridge
+- Optional: `npm start` or macOS `사관 스튜디오 실행.command`. Node server binds 127.0.0.1:4318 and serves the same app. File-origin projects must be backed up/imported on the HTTP origin.
+- `tools/studio-server.mjs`: same-origin token/Host checks, fixed CLI arguments (no shell), isolated temporary job directory, serial jobs, timeout/cancel, PNG validation and local `output/codex-images/` archive. Uses ChatGPT login and ignores user config/API-key environment variables; no paid API fallback. Native image-tool availability varies by CLI. CLI JSONL does not reliably expose native image calls, so PNG validation is not proof of image provenance.
+- `assets/codex-cli.js`: confirmed material plan only; one/all missing/redo images, progress, previews, auto-attach guarded by project object/shot ID/prompt/image/approval. Reload interrupts polling; archived images remain on disk.
+- Run `npm run test:cli` in addition to regular checks for bridge changes. Tests inject a fake generator; document actual CLI generation separately.

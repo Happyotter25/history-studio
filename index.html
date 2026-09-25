@@ -164,6 +164,7 @@ table.places input{ width:100%; padding:4px 6px; }
   <div class="card" id="material-output" hidden>
     <h3>3. 자료 만들고 각각 받기</h3><p id="material-progress"></p>
     <div class="material-outputs">
+      <div style="grid-column:1/-1" class="card"><h4>Codex로 그림 자동 제작</h4><p class="small">이 컴퓨터의 Codex CLI와 ChatGPT 구독을 사용합니다. 먼저 한 장을 확인한 뒤 나머지를 만드세요. 한 장씩 생성하며 완성된 그림은 자동 저장됩니다.</p><div class="row"><button class="btn" id="cli-connect">연결 확인</button><button class="btn primary" id="cli-one" disabled>한 장 먼저 만들기</button><button class="btn" id="cli-all" disabled>남은 그림 만들기</button><button class="btn" id="cli-stop" hidden>중단</button></div><p id="cli-status" class="small" role="status"></p><div id="cli-preview" class="grid2"></div></div>
       <div><h4>삽화·이미지</h4><p class="small">주문서를 Codex·ChatGPT에 전달해 그림을 만든 뒤, 파일 이름 그대로 불러오세요.</p><button class="btn primary" id="material-order">그림 주문서 받기</button> <label class="btn">만든 그림 불러오기<input id="material-images" type="file" accept="image/*" multiple hidden></label><button class="btn" data-material-export="images">완료된 삽화 PNG 받기</button><button class="btn" data-go="shots">화풍·등장인물·그림 확인</button></div>
       <div><h4>지도·인용·비교</h4><p class="small">지도와 글자 자료는 앱에서 PNG로 만듭니다. 그림 구독이나 API 키가 필요 없습니다.</p><button class="btn" data-material-export="maps">지도 PNG 받기</button><button class="btn" data-material-export="figures">인용·비교 PNG 받기</button></div>
       <div><h4>스토리 PPT</h4><p class="small">자료 한 장면당 슬라이드 한 장, 발표자 노트에 해당 원고를 넣습니다.</p><button class="btn" id="material-story">스토리 PPT 받기</button></div>
@@ -592,6 +593,7 @@ table.places input{ width:100%; padding:4px 6px; }
 <script src="assets/scene-edit.js"></script>
 <script src="assets/materials.js"></script>
 <script src="assets/materials-ui.js"></script>
+<script src="assets/codex-cli.js"></script>
 <script src="assets/ui.js"></script>
 </body>
 </html>
