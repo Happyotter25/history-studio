@@ -173,14 +173,14 @@
   HS.snapshots = function(){
     return idbGet('history:' + HS.project.id).catch(function(){ return null; }).then(function(h){ return h || []; });
   };
-  HS.snapshot = function(label){
+  HS.snapshot = function(label, required){
     var p = HS.project;
     if(!p.scenes.length) return Promise.resolve(); // 대본이 없으면 되돌릴 것도 없습니다
     var snap = { at: new Date().toISOString(), label: label, title: p.title, scenes: p.scenes.length, project: JSON.parse(JSON.stringify(p)) };
     return HS.snapshots().then(function(h){
       h.unshift(snap);
       return idbPut('history:' + p.id, h.slice(0, SNAP_MAX));
-    }).catch(function(){});
+    }).catch(function(e){ if(required) throw new Error('되돌리기 기록을 저장하지 못해 편집을 멈췄습니다. 백업을 받은 뒤 저장 공간을 확인해 주세요.'); });
   };
   HS.restoreSnapshot = function(i){
     return HS.snapshots().then(function(h){

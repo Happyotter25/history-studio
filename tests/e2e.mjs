@@ -1256,6 +1256,108 @@ await test('휴대폰 폭에서 가로로 넘치지 않는다', async () => {
   await pg.context().close();
 });
 
+async function editorFixture(viewport) {
+  const pg = await open(viewport);
+  await pg.evaluate(() => {
+    HS.project.scenes = ['첫째', '둘째', '셋째'].map((heading, i) => ({ heading, narration: '앞 문장입니다. 뒤 문장입니다.', kind: 'illust', mood: 'day', motion: 'zoomIn', keywords: ['앞', '뒤'], shots: [{id: 't00' + i, sentence: 0, type: 'scene', desc: heading, prompt: heading, places: [], image: null}] }));
+    HS.project.checks = {summary:'확인', items:[{scene:2, verdict:'unsupported', claim:'둘째'}]};
+    HS.project.lesson = {quiz:[{scene:2}]}; HS.project.thumb = {scene:1}; HS.changed('all');
+  });
+  await pg.click('#tabs button[data-tab=script]');
+  return pg;
+}
+await test('장면 나누기: 커서 위치·그림 ID·자료 번호·저장·되돌리기', async () => {
+  const pg = await editorFixture();
+  await pg.locator('[data-i="0"] [data-k=narration]').evaluate(el => { el.focus(); el.setSelectionRange(8, 8); });
+  await pg.click('[data-i="0"] [data-act=split]');
+  await pg.waitForFunction(() => HS.project.scenes.length === 4);
+  const state = await pg.evaluate(() => ({sc:HS.project.scenes, thumb:HS.project.thumb, checks:HS.project.checks, quiz:HS.project.lesson.quiz}));
+  assert.equal(state.sc[0].narration, '앞 문장입니다.'); assert.equal(state.sc[1].narration, '뒤 문장입니다.');
+  assert.equal(state.sc[0].shots[0].id, 't000'); assert.notEqual(state.sc[1].shots[0].id, 't000');
+  assert.equal(state.thumb.scene, 2); assert.equal(state.quiz[0].scene, 3); assert.equal(state.checks, null);
+  await pg.evaluate(() => HS.persist()); await pg.reload(); await pg.waitForSelector('body[data-ready]');
+  assert.equal(await pg.evaluate(() => HS.project.scenes.length), 4);
+  await pg.evaluate(() => HS.restoreSnapshot(0));
+  assert.equal(await pg.evaluate(() => HS.project.scenes.length), 3);
+  assert.equal(await pg.evaluate(() => HS.project.checks.items[0].scene), 2);
+  await pg.context().close();
+});
+await test('장면 나누기: 문장 중간과 문장 경계의 샷 배치, 빈 앞뒤는 거절', async () => {
+  const pg = await editorFixture();
+  const state = await pg.evaluate(async () => {
+    const s = HS.project.scenes[0]; s.shots.push({id:'late', sentence:1, type:'scene', image:null});
+    let error = ''; try { await HS.editScenes('split', 0, 0); } catch(e) {error=e.message;}
+    await HS.editScenes('split', 0, 4);
+    return {error, sc:HS.project.scenes.slice(0,2)};
+  });
+  assert.match(state.error, /커서/); assert.equal(state.sc[0].narration, '앞 문장');
+  assert.equal(state.sc[1].shots[0].sentence, 0); assert.notEqual(state.sc[1].shots[0].id, 't000');
+  assert.equal(state.sc[1].shots[1].id, 'late'); assert.equal(state.sc[1].shots[1].sentence, 1);
+  await pg.context().close();
+});
+await test('장면 합치기: 두 그림·문장 번호·목소리 취소·원본 복원', async () => {
+  const pg = await editorFixture();
+  await pg.evaluate(() => {
+    HS.project.scenes[0].audio='data:audio/wav;base64,AAAA';
+    HS.project.scenes[0].shots[0].candidates=['old-image'];
+  });
+  pg.once('dialog', d => d.dismiss()); await pg.click('[data-i="0"] [data-act=merge]');
+  assert.equal(await pg.evaluate(() => HS.project.scenes.length), 3);
+  assert.ok(await pg.evaluate(() => HS.project.scenes[0].audio));
+  pg.once('dialog', d => d.accept()); await pg.click('[data-i="0"] [data-act=merge]');
+  await pg.waitForFunction(() => HS.project.scenes.length === 2);
+  const state = await pg.evaluate(() => ({s:HS.project.scenes[0], thumb:HS.project.thumb.scene, quiz:HS.project.lesson.quiz[0].scene}));
+  assert.equal(state.s.shots.length, 2); assert.equal(state.s.shots[1].sentence, 2); assert.equal(state.s.audio, null);
+  assert.deepEqual(state.s.shots[0].candidates, ['old-image']); assert.equal(state.thumb, 0); assert.equal(state.quiz, 1);
+  await pg.evaluate(() => HS.restoreSnapshot(0));
+  assert.ok(await pg.evaluate(() => HS.project.scenes[0].audio));
+  assert.equal(await pg.evaluate(() => HS.project.scenes.length), 3);
+  await pg.context().close();
+});
+await test('순서 바꾸기: 끌기·키보드 단추와 썸네일·사실 확인·퀴즈 연결', async () => {
+  // 실제 마우스로 잡고 놓을 두 손잡이가 화면 안에 보이도록 합니다.
+  const pg = await editorFixture({ width: 1300, height: 1800 });
+  await pg.locator('[data-i="0"] .drag-handle').dragTo(pg.locator('[data-i="2"] header'));
+  await pg.waitForFunction(() => HS.project.scenes[2].heading === '첫째');
+  assert.deepEqual(await pg.evaluate(() => [HS.project.thumb.scene, HS.project.checks.items[0].scene, HS.project.lesson.quiz[0].scene]), [0,1,1]);
+  await pg.locator('[data-i="0"] [data-act=down]').focus(); await pg.keyboard.press('Enter');
+  await pg.waitForFunction(() => HS.project.scenes[1].heading === '둘째');
+  assert.deepEqual(await pg.evaluate(() => [HS.project.thumb.scene, HS.project.checks.items[0].scene, HS.project.lesson.quiz[0].scene]), [1,2,2]);
+  assert.equal(await pg.evaluate(() => HS.matchShotFile('S02-1_t000.png') === HS.project.scenes[2].shots[0]), true);
+  assert.ok(await pg.locator('[data-i="0"] [data-act=up]').isDisabled());
+  assert.ok(await pg.locator('[data-i="2"] [data-act=merge]').isDisabled());
+  await pg.context().close();
+});
+await test('장면 편집: 저장 실패·그림 생성 중에는 원본을 바꾸지 않는다', async () => {
+  const pg = await editorFixture();
+  const result = await pg.evaluate(async () => {
+    const original = JSON.stringify(HS.project.scenes), errors=[];
+    HS.Q.running=1;
+    try { await HS.editScenes('move',0,2); } catch(e) {errors.push(e.message);}
+    HS.Q.running=0;
+    HS.snapshot = () => Promise.reject(new Error('저장 실패'));
+    try { await HS.editScenes('split',0,8); } catch(e) {errors.push(e.message);}
+    return {errors, same:original===JSON.stringify(HS.project.scenes), busy:HS.sceneEditBusy};
+  });
+  assert.equal(result.errors.length,2); assert.ok(result.same); assert.equal(result.busy,false);
+  await pg.context().close();
+});
+await test('장면 합치기: 샷 없는 삽화도 보존하고 자료 장면은 앞 설정 유지', async () => {
+  const pg = await editorFixture();
+  const result = await pg.evaluate(async () => {
+    HS.project.scenes.forEach(s => {s.shots=[];});
+    await HS.editScenes('merge',0);
+    const pics=HS.project.scenes[0].shots.map(s=>s.image);
+    await HS.restoreSnapshot(0);
+    HS.project.scenes[0].kind='timeline'; HS.project.scenes[0].data={events:[{year:'1597',label:'명량'}]};
+    await HS.editScenes('merge',0);
+    return {pics,kind:HS.project.scenes[0].kind,data:HS.project.scenes[0].data};
+  });
+  assert.equal(result.pics.length,2); assert.ok(result.pics.every(x=>x.startsWith('data:image/png')));
+  assert.equal(result.kind,'timeline'); assert.equal(result.data.events[0].year,'1597');
+  await pg.context().close();
+});
+
 await browser.close();
 const bad = results.filter(r => !r[0]);
 console.log(`\n${results.length - bad.length} / ${results.length} 통과`);

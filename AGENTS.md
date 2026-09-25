@@ -42,7 +42,7 @@ This repo was started from the same author's 어전회의 (eojeon) project and f
 ```
 npm run setup     # npm install + npx playwright install chromium (needs internet)
 npm run check     # syntax of every script + index.html script list (offline, a second)
-npm test          # node tests/e2e.mjs — 62 Playwright tests (Chromium runs with a fake microphone);
+npm test          # node tests/e2e.mjs — 68 Playwright tests (Chromium runs with a fake microphone);
                   # Claude / OpenAI / Gemini / YouTube oEmbed are all mocked, so no keys or network are needed
 ```
 Codex sandboxes usually have no network while the agent runs: do `npm run setup` in the environment's setup
@@ -75,6 +75,7 @@ the app chose by wrapping `HS.download`.
 | `assets/lesson.js` | ⑨ tab: `HS.generateLessonAI` / `HS.generateLessonSimple`, `HS.worksheetHtml(teacher)` (print-ready HTML), `HS.exportQuizPptx` (question → answer slides); wires its own UI |
 | `assets/upload.js` | ⑧ tab: `HS.descriptionSuffix` (chapters + `HS.referencesText`, appended to the description and stripped when edited), `HS.srt` (from `HS.subtitleCues`, same timing as burned-in subtitles), `HS.chapters`, `HS.generateUploadAI` / `HS.uploadSimple`, `HS.drawThumbnail`; wires its own UI |
 | `assets/ui.js` | Wires tabs, inputs and buttons |
+| `assets/scene-edit.js` | `HS.editScenes(action,index,value,options)` for split-at-cursor, merge-next, move, delete. Requires a successful undo snapshot (`HS.snapshot(label,true)`); remaps thumbnail, check and quiz scene references. Split/merge reset duration and invalidate checks; recorded audio is removed only with `resetAudio` consent from the UI. Split copies continuing shots with new IDs; merge connects illustration shots, freezes SVG/procedural backgrounds as stills, and keeps first-scene kind/data/character/transition. Blocks edits during running image queue jobs and rejects concurrent stale edits. |
 | `content/places.js` | Gazetteer (name, aliases, lon/lat, kind) used by offline map extraction — extend freely |
 | `content/sample.js` | Sample source (임진왜란) |
 | `content/geo.js` | **Generated** by `tools/vendor.mjs` (Natural Earth 1:50m, East Asia). Never edit by hand |

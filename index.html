@@ -56,6 +56,9 @@ canvas{ max-width:100%; height:auto; display:block; border-radius:8px; backgroun
 .scene .meta{ display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:8px; margin-top:8px; }
 @media (max-width:620px){ .scene .meta{ grid-template-columns:minmax(0,1fr); } }
 .scene .meta textarea{ min-height:60px; font-size:13px; }
+.scene .drag-handle{ cursor:grab; touch-action:pan-y; }
+.scene.drag-over{ outline:2px solid var(--accent); }
+.scene-tools{ margin:8px 0; }
 .small{ font-size:13px; color:var(--muted); }
 .thumbs{ display:flex; gap:8px; flex-wrap:wrap; }
 .thumbs canvas,.thumbs img{ width:180px; border:1px solid var(--line); }
@@ -200,6 +203,7 @@ table.places input{ width:100%; padding:4px 6px; }
 <section class="tab" id="tab-script">
   <h2>대본</h2>
   <p class="lead">장면마다 내레이션, 화면(삽화) 설명, 이미지 생성용 프롬프트를 고칠 수 있습니다. 고친 내용은 자동 저장됩니다.</p>
+  <p class="small">내레이션에서 나눌 곳을 누른 뒤 <b>커서에서 나누기</b>를 누르세요. <b>다음 장면과 합치기</b>로 연결하거나, <b>↕ 끌기</b> 손잡이와 ↑↓ 단추로 순서를 바꿉니다. 편집 전 상태는 설정 → 되돌리기 기록에 남습니다.</p>
   <div class="row" style="margin-bottom:10px">
     <button class="btn" id="btn-add-scene">장면 더하기</button>
     <button class="btn" id="btn-copy-script">대본 전체 복사</button>
@@ -552,6 +556,7 @@ table.places input{ width:100%; padding:4px 6px; }
 <script src="assets/package.js"></script>
 <script src="assets/queue.js"></script>
 <script src="assets/shots-ui.js"></script>
+<script src="assets/scene-edit.js"></script>
 <script src="assets/ui.js"></script>
 </body>
 </html>

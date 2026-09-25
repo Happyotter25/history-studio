@@ -161,9 +161,11 @@
     list.innerHTML = p.scenes.map(function(s, i){
       var fl = (flags[i] || []).map(function(v){ return '<span class="flag ' + v + '">' + HS.VERDICT[v] + '</span>'; }).join(' ');
       return '<div class="scene" data-i="' + i + '"><header class="row">' +
-        '<span class="num">#' + (i + 1) + '</span><input type="text" data-k="heading" value="' + HS.esc(s.heading) + '">' + fl +
-        '<button class="btn" data-act="up" title="위로">↑</button><button class="btn" data-act="down" title="아래로">↓</button><button class="btn" data-act="del" title="지우기">✕</button></header>' +
+        '<span class="num">#' + (i + 1) + '</span><input type="text" data-k="heading" aria-label="장면 제목" value="' + HS.esc(s.heading) + '">' + fl +
+        '<span class="btn drag-handle" draggable="true" title="다른 장면으로 끌어서 순서 바꾸기" aria-label="장면 끌기. 키보드에서는 위로 아래로 단추를 사용하세요">↕ 끌기</span>' +
+        '<button class="btn" data-act="up" title="위로" aria-label="장면 위로"' + (i === 0 ? ' disabled' : '') + '>↑</button><button class="btn" data-act="down" title="아래로" aria-label="장면 아래로"' + (i === p.scenes.length - 1 ? ' disabled' : '') + '>↓</button><button class="btn" data-act="del" title="지우기">✕</button></header>' +
         '<textarea data-k="narration" placeholder="내레이션">' + HS.esc(s.narration) + '</textarea>' +
+        '<div class="row scene-tools"><button class="btn" data-act="split">커서에서 나누기</button><button class="btn" data-act="merge"' + (i === p.scenes.length - 1 ? ' disabled' : '') + '>다음 장면과 합치기</button><span class="small">녹음이 있는 장면은 나누거나 합친 뒤 다시 녹음합니다.</span></div>' +
         '<div class="meta"><label class="small">화면(삽화) 설명<textarea data-k="visual">' + HS.esc(s.visual) + '</textarea></label>' +
         '<label class="small">이미지 생성 프롬프트 <button class="btn" data-act="copyprompt" style="padding:0 8px">복사</button><textarea data-k="prompt">' + HS.esc(s.prompt) + '</textarea></label></div>' +
         '<div class="row small" style="margin-top:6px">분위기 <select data-k="mood">' + opts(MOODS, s.mood) + '</select> 카메라 <select data-k="motion">' + opts(MOTIONS, s.motion) + '</select> <span>약 ' + Math.round(HS.sceneDuration(s)) + '초</span>' +
@@ -198,6 +200,30 @@
     HS.changed('scene');
   });
   $('scene-list').addEventListener('change', function(e){ if(e.target.tagName === 'SELECT' && e.target.dataset.k) renderScript(); });
+  function editScene(action, i, value, resetAudio){
+    HS.editScenes(action, i, value, { resetAudio: resetAudio }).then(function(next){
+      renderScript();
+      var input = $('scene-list').querySelector('[data-i="' + next + '"] [data-k="heading"]');
+      if(input) input.focus();
+      HS.toast(action === 'split' || action === 'merge' ? '장면을 편집했습니다. 사실 확인과 수업 자료를 다시 살펴보세요.' : '장면을 편집했습니다. 설정의 되돌리기 기록에서 복원할 수 있습니다.');
+    }).catch(function(err){ status('script-status', err.message, true); });
+  }
+  var draggedScene = null;
+  $('scene-list').addEventListener('dragstart', function(e){
+    var handle = e.target.closest('.drag-handle'); if(!handle) return;
+    draggedScene = +handle.closest('.scene').dataset.i;
+    e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', String(draggedScene));
+  });
+  function clearDrop(){ Array.prototype.forEach.call($('scene-list').querySelectorAll('.drag-over'), function(el){ el.classList.remove('drag-over'); }); }
+  $('scene-list').addEventListener('dragover', function(e){
+    var box = e.target.closest('.scene'); if(draggedScene === null || !box) return;
+    e.preventDefault(); e.dataTransfer.dropEffect = 'move'; clearDrop(); box.classList.add('drag-over');
+  });
+  $('scene-list').addEventListener('drop', function(e){
+    var box = e.target.closest('.scene'); if(draggedScene === null || !box) return;
+    e.preventDefault(); var from = draggedScene; draggedScene = null; clearDrop(); editScene('move', from, +box.dataset.i);
+  });
+  $('scene-list').addEventListener('dragend', function(){ draggedScene = null; clearDrop(); });
   $('scene-list').addEventListener('click', function(e){
     var b = e.target.closest('button[data-act]'); if(!b) return;
     var box = b.closest('.scene'), i = +box.dataset.i, sc = P().scenes, act = b.dataset.act;
@@ -212,10 +238,21 @@
         .catch(function(err){ st.textContent = HS.whyFail(err); b.disabled = false; });
       return;
     }
-    if(act === 'del'){ if(!confirm('#' + (i + 1) + ' 장면을 지울까요?')) return; sc.splice(i, 1); }
-    if(act === 'up' && i > 0) sc.splice(i - 1, 0, sc.splice(i, 1)[0]);
-    if(act === 'down' && i < sc.length - 1) sc.splice(i + 1, 0, sc.splice(i, 1)[0]);
-    HS.changed('scenes'); renderScript();
+    if(act === 'split'){
+      var cut = box.querySelector('[data-k="narration"]').selectionStart, text = sc[i].narration || '';
+      if(!text.slice(0, cut).trim() || !text.slice(cut).trim()){ status('script-status', '내레이션에서 나눌 곳을 눌러 커서를 놓으세요. 앞뒤에 글이 있어야 합니다.', true); return; }
+      if(sc[i].audio && !confirm('이 장면의 목소리를 지우고 두 장면으로 나눌까요? 나눈 뒤 다시 녹음해야 합니다. 원본은 되돌리기 기록에 보관합니다.')) return;
+      editScene('split', i, cut, true); return;
+    }
+    if(act === 'merge'){
+      if(!sc[i + 1]) return;
+      var msg = '#' + (i + 1) + '과 #' + (i + 2) + '의 내레이션을 합칠까요?\n삽화 장면끼리는 그림 목록을 연결합니다. 장면 종류·자료·배경·인물·전환은 앞 장면 설정을 사용합니다. SVG 움직임은 정지 그림으로 바뀝니다.\n직접 정한 길이는 글 길이에 맞춰 다시 계산합니다. 원본은 되돌리기 기록에 보관합니다.';
+      if(sc[i].audio || sc[i + 1].audio) msg += '\n두 장면의 목소리는 지워지므로 다시 녹음해야 합니다.';
+      if(confirm(msg)) editScene('merge', i, null, true); return;
+    }
+    if(act === 'del'){ if(confirm('#' + (i + 1) + ' 장면을 지울까요? 원본은 되돌리기 기록에 남습니다.')) editScene('delete', i); return; }
+    if(act === 'up') editScene('move', i, i - 1);
+    if(act === 'down') editScene('move', i, i + 1);
   });
   $('btn-add-scene').addEventListener('click', function(){
     P().scenes.push({ heading: '새 장면', narration: '', visual: '', prompt: '', mood: 'day', motion: 'zoomIn', image: null });
