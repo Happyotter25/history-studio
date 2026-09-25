@@ -35,12 +35,21 @@ test('브라우저: 버튼 → 생성 → 미리보기·저장, 프로젝트 변
  const browser=await chromium.launch({executablePath:process.env.CHROMIUM_PATH||undefined});
  try{
   const page=await browser.newPage();await page.goto('http://127.0.0.1:'+server.address().port);await page.waitForSelector('body[data-ready]');
-  await page.click('#material-sample');await page.click('#material-propose');await page.click('#material-confirm');
+  await page.click('#tabs button[data-tab=materials]');await page.click('#material-sample');await page.click('#material-propose');await page.click('#material-confirm');
   await page.waitForFunction(()=>!document.getElementById('cli-one').disabled);await page.click('#cli-one');await page.waitForTimeout(100);release();
   await page.waitForFunction(()=>document.getElementById('cli-status').textContent.includes('1장을 완성'));
   assert.equal(await page.locator('#cli-preview img').count(),1);assert.equal(await page.evaluate(()=>HS.pendingShots('missing').length),10);
   await page.click('#cli-one');await page.waitForTimeout(100);await page.evaluate(()=>HS.project=JSON.parse(JSON.stringify(HS.project)));release();
   await page.waitForFunction(()=>document.getElementById('cli-status').textContent.includes('자료가 바뀌었습니다'));
   assert.equal(await page.evaluate(()=>HS.pendingShots('missing').length),10);
+ }finally{await browser.close();await new Promise(r=>server.close(r));}
+});
+
+test('장면 스튜디오: Codex 의미 분석과 현재 장면 이미지 생성 연결',async()=>{
+ const {chromium}=await import('playwright');const kinds=[];
+ const server=createStudioServer({status:async()=>({ready:true}),runner:async(job)=>{
+   kinds.push(job.kind);if(job.kind==='analysis')return Buffer.from(JSON.stringify({scenes:[{end:1,title:'배경',reason:'배경 설명',type:'text',content:'전쟁의 배경',prompt:''},{end:2,title:'전투',reason:'전투 장면',type:'image',content:'',prompt:'판옥선 한 척'}]}));return png;
+ }});await new Promise(r=>server.listen(0,'127.0.0.1',r));const browser=await chromium.launch({executablePath:process.env.CHROMIUM_PATH||undefined});
+ try{const page=await browser.newPage();await page.goto('http://127.0.0.1:'+server.address().port);await page.waitForSelector('body[data-ready]');await page.fill('#studio-script','전쟁이 시작되었습니다. 이순신이 출전했습니다.');await page.click('#studio-analyze');await page.waitForFunction(()=>HS.project.studio.mode==='review');assert.equal(await page.locator('#studio-outline button').count(),2);await page.click('#studio-confirm-plan');await page.waitForFunction(()=>HS.project.studio.mode==='compose');await page.click('#studio-next');await page.click('#studio-generate');await page.waitForFunction(()=>HS.project.studio.slides[1].image);assert.equal(await page.evaluate(()=>HS.project.studio.slides[0].image),null);assert.deepEqual(kinds,['analysis','image']);assert.ok(!await page.evaluate(()=>HS.studioReviewed(HS.project.studio,HS.project.studio.slides[1])));
  }finally{await browser.close();await new Promise(r=>server.close(r));}
 });

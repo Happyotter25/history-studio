@@ -176,8 +176,8 @@
   };
   HS.snapshot = function(label, required){
     var p = HS.project;
-    if(!p.scenes.length) return Promise.resolve(); // 대본이 없으면 되돌릴 것도 없습니다
-    var snap = { at: new Date().toISOString(), label: label, title: p.title, scenes: p.scenes.length, project: JSON.parse(JSON.stringify(p)) };
+    if(!p.scenes.length && !(p.studio && p.studio.slides.length)) return Promise.resolve(); // 대본이 없으면 되돌릴 것도 없습니다
+    var snap = { at: new Date().toISOString(), label: label, title: p.title, scenes: p.studio&&p.studio.slides.length ? p.studio.slides.length : p.scenes.length, project: JSON.parse(JSON.stringify(p)) };
     return HS.snapshots().then(function(h){
       h.unshift(snap);
       return idbPut('history:' + p.id, h.slice(0, SNAP_MAX));

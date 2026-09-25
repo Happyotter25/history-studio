@@ -133,7 +133,8 @@ table.places input{ width:100%; padding:4px 6px; }
 </header>
 <nav id="tabs" aria-label="스튜디오 도구">
   <span class="nav-label">제작 워크스페이스</span>
-  <button data-tab="teaching" class="on">강의 자료 작업실</button>
+  <button data-tab="studio" class="on">강의 자료 작업실</button>
+  <button data-tab="teaching">이전 자료 편집</button>
   <button data-tab="materials">대본·제작 목록</button>
   <button data-tab="shots">삽화·이미지</button>
   <button data-tab="story">스토리 PPT</button>
@@ -149,6 +150,26 @@ table.places input{ width:100%; padding:4px 6px; }
   <button data-tab="settings">설정</button>
 </nav>
 <main>
+<section class="tab on" id="tab-studio">
+  <div class="studio-heading"><div><span class="hero-eyebrow">대본에서 한 장면씩 · 사람이 완성하는 슬라이드</span><h2>강의 자료 작업실</h2><p class="lead">의미 단위로 나누고, 한 장면을 한 슬라이드로.<br>글·판서·AI 이미지를 채우며 하나씩 검토합니다.</p></div><button class="btn" data-go="teaching">이전 자료 작업 열기</button></div>
+  <div class="card row studio-progress-bar"><strong id="studio-progress"></strong><button class="btn" id="studio-cancel" hidden>Codex 작업 중단</button><a id="studio-result-link" download="생성된 장면.png" hidden>최근 생성 그림 별도 PNG 저장</a></div>
+  <p id="studio-status" class="status" role="status" aria-live="polite"></p>
+  <fieldset id="studio-fields">
+    <div class="card" id="studio-input"><h3>1. 대본을 분석합니다</h3><p class="small">Codex가 설명 주제·사건·전환점을 보고 장면을 제안합니다. 원문은 바꾸지 않으며, 다음 단계에서 나누거나 합칠 수 있습니다.</p><label for="studio-script">완성 대본 · 최대 12,000자</label><textarea id="studio-script" maxlength="12000" placeholder="강의할 대본을 붙여 넣으세요."></textarea><div class="row"><button class="btn primary" id="studio-analyze">Codex로 의미 단위 분석</button><button class="btn" id="studio-paragraph">연결 없이 문단 초안 만들기</button><button class="btn" id="studio-import-script">기존 프로젝트 대본 가져오기</button><button class="btn" id="studio-sample">명량대첩 예시</button><button class="btn" id="studio-return" hidden>기존 장면으로 돌아가기</button></div><p class="small">Codex 분석·이미지 생성에는 로컬 앱과 ChatGPT 구독 로그인이 필요합니다. 문단 초안은 AI 의미 분석이 아니며 직접 경계를 검토해야 합니다.</p></div>
+    <div id="studio-work" hidden>
+      <div class="card row"><span id="studio-method" class="small"></span><button class="btn" id="studio-edit-script">대본 다시 분석</button><button class="btn" id="studio-reopen-plan">장면 구분 다시 검토</button><button class="btn primary" id="studio-confirm-plan">구분 확정 → 장면 만들기</button><button class="btn" id="studio-png-all">검토 완료 PNG 묶음</button><button class="btn" id="studio-ppt-all">슬라이드 PPT</button></div>
+      <div class="scene-studio-layout"><aside class="card studio-outline"><h3>장면 목록</h3><p class="small">장면 1개 = 슬라이드 1장</p><div id="studio-outline"></div></aside><div class="studio-main">
+        <article class="card"><div class="row"><button class="btn" id="studio-prev">← 이전 장면</button><button class="btn" id="studio-next">다음 장면 →</button><span id="studio-review-state" class="small"></span></div><label for="studio-scene-title">슬라이드 제목</label><input id="studio-scene-title" type="text" maxlength="100"><p id="studio-reason" class="small"></p><details id="studio-source"><summary>이 장면의 원고 보기 · 원문 보존</summary><label for="studio-original">장면에 해당하는 원고</label><textarea id="studio-original" readonly></textarea></details><div id="studio-boundaries"><p class="small">원고에서 나눌 위치를 눌러 커서를 놓으세요. 나누기·합치기는 해당 장면의 슬라이드 내용을 비우며, 변경 전 상태는 상단 되돌리기에 남습니다.</p><div class="row"><button class="btn" id="studio-split">커서 위치에서 나누기</button><button class="btn" id="studio-merge">다음 장면과 합치기</button></div></div></article>
+        <div id="studio-editor">
+          <article class="card"><h3>이 장면은 무엇으로 설명할까요?</h3><label>슬라이드 표현<select id="studio-type"><option value="text">글 · 핵심 문장</option><option value="board">판서 · 개념과 흐름</option><option value="image">이미지 · AI 삽화 또는 사진</option></select></label><label id="studio-content-label">슬라이드 내용<textarea id="studio-content" maxlength="1200" placeholder="이 장면에서 전달할 내용을 직접 다듬으세요."></textarea><span id="studio-content-help" class="small"></span></label>
+          <div id="studio-image-editor" hidden><label>이 장면의 이미지 제작 지시<textarea id="studio-prompt" maxlength="2000" placeholder="인물·시대·장소·구도·보여 줄 핵심을 적어 주세요."></textarea></label><div class="row"><button class="btn primary" id="studio-generate">이 장면만 Codex로 생성</button><label class="btn">사진·완성 그림 넣기<input type="file" id="studio-image-file" accept="image/png,image/jpeg,image/webp" hidden></label></div><p class="small">다른 장면은 자동 생성하지 않습니다. 다시 생성하면 이전 그림은 최대 3개까지 후보로 남깁니다. 제작 지시를 바꾸면 이미지를 다시 준비해야 합니다.</p><div id="studio-candidates"></div></div><label>출처·제작 메모<input id="studio-credit" type="text" maxlength="180" placeholder="인용 출처, 직접 촬영, AI 재현 여부 등을 적어 주세요."></label></article>
+          <article class="card studio-preview"><h3>슬라이드 미리보기</h3><canvas id="studio-canvas" width="1920" height="1080" aria-label="현재 장면의 한 장짜리 슬라이드"></canvas><p id="studio-preview-note" class="small"></p><p class="small">내용·역사적 표현·출처를 직접 확인하세요. 수정하면 검토 대기로 돌아갑니다.</p><div class="row"><button class="btn primary" id="studio-review-done">검토 완료하고 다음 장면</button><button class="btn" id="studio-png-one">현재 슬라이드 PNG</button></div></article>
+        </div>
+      </div></div>
+    </div>
+  </fieldset>
+</section>
+
 <section class="tab" id="tab-materials">
   <div class="material-hero"><div class="hero-copy"><span class="hero-eyebrow">HISTORY · CREATIVE STUDIO</span><h2>대본과 제작 목록 준비</h2><p class="lead">원고를 구간별로 나누고 자료 종류를 검토하세요.<br>확정한 자료는 강의 자료 작업실에서 다듬습니다.</p></div><div class="hero-art" aria-hidden="true"><div class="hero-sheet"><i></i><i></i><i></i><i></i><i></i></div><div class="hero-picture"></div></div></div>
   <ol class="workflow-path" aria-label="자료 제작 순서"><li id="workflow-input" aria-current="step"><b>01</b> 대본 입력</li><li id="workflow-review"><b>02</b> 목록 검토</li><li id="workflow-output"><b>03</b> 자료 제작</li></ol>
@@ -178,7 +199,7 @@ table.places input{ width:100%; padding:4px 6px; }
   <p id="material-status" class="status" role="status" aria-live="polite"></p>
 </section>
 
-<section class="tab on" id="tab-teaching">
+<section class="tab" id="tab-teaching">
   <div class="teaching-home-header"><div><span class="hero-eyebrow">사관 스튜디오 · 메인 작업실</span><h2>강의 자료 작업실</h2><p class="lead">사진 · 삽화 · 지도 · 인용문을 원고 순서대로 준비하고<br>강조와 확대를 더해 강의용 PNG로 저장하세요.</p></div><div class="row"><button class="btn" data-go="materials">대본·제작 목록</button><button class="btn" data-go="board">판서 자료</button></div></div>
   <ol class="workflow-path teaching-path" aria-label="강의 자료 작업 순서"><li id="teaching-step-plan"><b>01</b> 대본 준비</li><li id="teaching-step-make"><b>02</b> 자료 만들기</li><li id="teaching-step-refine"><b>03</b> 강조·확대</li><li id="teaching-step-export"><b>04</b> PNG 저장</li></ol>
   <div class="card teaching-overview"><div><strong id="teaching-project-status"></strong><p id="teaching-next-hint" class="small"></p></div><button class="btn primary" id="teaching-next-action">작업 시작</button></div>
@@ -636,6 +657,8 @@ table.places input{ width:100%; padding:4px 6px; }
 <script src="assets/codex-cli.js"></script>
 <script src="assets/teaching.js"></script>
 <script src="assets/teaching-ui.js"></script>
+<script src="assets/scene-studio.js"></script>
+<script src="assets/scene-studio-ui.js"></script>
 <script src="assets/ui.js"></script>
 </body>
 </html>

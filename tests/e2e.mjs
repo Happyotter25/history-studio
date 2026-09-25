@@ -115,7 +115,7 @@ console.log('사관 스튜디오 시험');
 
 await test('처음 열면 강의 자료 작업실이 보이고 기존 소스 도구도 열린다', async () => {
   const page = await open();
-  assert.equal(page.initialTab, 'tab-teaching');
+  assert.equal(page.initialTab, 'tab-studio');
   assert.ok(await page.isVisible('#tab-source'));
   for (const t of ['script', 'video', 'story', 'map', 'board', 'chalk', 'upload', 'lesson', 'settings', 'source']) await page.click(`#tabs button[data-tab=${t}]`);
   assert.deepEqual(page.errors, []);
@@ -1547,7 +1547,31 @@ await test('강의 자료: 메인 대본 시작·구간 탐색·검색·출력 �
   await pg.fill('#teaching-search-scenes','절대로없는문구');assert.equal(await pg.locator('#teaching-readiness button').count(),0);assert.match(await pg.locator('#teaching-readiness').textContent(),/조건에 맞는/);
   await pg.fill('#teaching-search-scenes','');await pg.selectOption('#teaching-filter','all');assert.match(await pg.locator('#teaching-output-count').textContent(),/PNG/);
   await pg.setViewportSize({width:390,height:844});assert.ok(await pg.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
-  await pg.click('#tabs button[data-tab=materials]');await pg.reload();await pg.waitForSelector('body[data-ready]');assert.ok(await pg.locator('#tab-teaching').isVisible());await pg.context().close();
+  await pg.click('#tabs button[data-tab=materials]');await pg.reload();await pg.waitForSelector('body[data-ready]');assert.ok(await pg.locator('#tab-studio').isVisible());await pg.context().close();
+});
+
+await test('장면 스튜디오: 원문 경계·분할·합치기·검토 무효화·한 장면 한 출력',async()=>{
+  const pg=await open();
+  const r=await pg.evaluate(async()=>{
+    const raw='  첫 번째 설명입니다.\n\n두 번째 설명입니다. 😀\n';
+    let p=HS.studioParagraphPlan(raw);const same=p.slides.map(s=>raw.slice(s.start,s.end)).join('')===raw;
+    HS.studioSplit(p,0,5);HS.studioMerge(p,0);HS.studioValidate(p);const merged=p.slides.map(s=>raw.slice(s.start,s.end)).join('')===raw;
+    let invalid='';try{HS.studioAnalyzeResult(raw,{scenes:[{end:1,title:'제목',reason:'이유',type:'text',content:'글',prompt:''}]});}catch(e){invalid=e.message;}
+    p.mode='compose';p.slides.forEach((s,i)=>{s.type=i?'board':'text';s.content=i?'*핵심 개념\n- 원인\n→ 결과':'한 장면의 핵심 설명';s.reviewed=HS.studioFingerprint(p,s);});HS.project.studio=p;
+    const z=await JSZip.loadAsync(await HS.exportStudio('png',true)),ppt=await JSZip.loadAsync(await HS.exportStudio('ppt',true));
+    const pngs=Object.keys(z.files).filter(n=>n.endsWith('.png')).length,slides=Object.keys(ppt.files).filter(n=>/^ppt\/slides\/slide\d+\.xml$/.test(n)).length;
+    const notes=await ppt.file('ppt/notesSlides/notesSlide1.xml').async('string');p.slides[0].content+=' 수정';let blocked='';try{await HS.exportStudio('png',true);}catch(e){blocked=e.message;}
+    return {same,merged,invalid,pngs,slides,n:p.slides.length,notes,blocked};
+  });assert.ok(r.same&&r.merged);assert.match(r.invalid,/빠진 원고/);assert.equal(r.pngs,r.n);assert.equal(r.slides,r.n);assert.match(r.notes,/첫 번째/);assert.match(r.blocked,/검토 완료/);await pg.context().close();
+});
+await test('장면 스튜디오: 입력→구분 검토→한 장면씩 글·판서→검토 완료·저장·복원',async()=>{
+  const pg=await open();await pg.click('#tabs button[data-tab=studio]');await pg.fill('#studio-script','첫 장면입니다.\n\n두 번째 장면입니다.');await pg.click('#studio-paragraph');await pg.waitForFunction(()=>HS.project.studio.mode==='review');
+  assert.equal(await pg.locator('#studio-outline button').count(),2);await pg.click('#studio-confirm-plan');await pg.waitForFunction(()=>HS.project.studio.mode==='compose');
+  await pg.fill('#studio-content','첫 장면의 핵심 문장');await pg.click('#studio-review-done');await pg.waitForFunction(()=>HS.project.studio.slides[0].reviewed);await pg.selectOption('#studio-type','board');await pg.fill('#studio-content','*원인\n→ 결과');await pg.click('#studio-review-done');await pg.waitForFunction(()=>!document.getElementById('studio-png-all').disabled);
+  assert.match(await pg.locator('#studio-progress').textContent(),/2 \/ 2/);
+  await pg.fill('#studio-content','내용 수정');assert.ok(await pg.locator('#studio-png-all').isDisabled());await pg.evaluate(()=>HS.persist());await pg.reload();await pg.waitForSelector('body[data-ready]');assert.equal(await pg.evaluate(()=>HS.project.studio.slides[1].content),'내용 수정');
+  await pg.click('#studio-reopen-plan');await pg.waitForFunction(()=>HS.project.studio.mode==='review');await pg.click('#studio-outline button[data-studio-scene="0"]');await pg.click('#studio-merge');await pg.waitForFunction(()=>HS.project.studio.slides.length===1);await pg.evaluate(()=>HS.restoreSnapshot(0));assert.equal(await pg.evaluate(()=>HS.project.studio.slides.length),2);
+  await pg.setViewportSize({width:390,height:844});assert.ok(await pg.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await pg.context().close();
 });
 
 await browser.close();

@@ -2,7 +2,7 @@
 (function(){
   'use strict';
   var HS = window.HS, $ = HS.$, P = function(){ return HS.project; };
-  var current = 'teaching';
+  var current = 'studio';
 
   function status(id, msg, err){ var el = $(id); if(!el) return; el.textContent = msg || ''; el.classList.toggle('err', !!err); }
   function aiOn(){ return !!HS.CFG.key; }
@@ -22,7 +22,7 @@
   Array.prototype.forEach.call(document.querySelectorAll('[data-go]'), function(b){ b.addEventListener('click', function(){ show(b.dataset.go); }); });
 
   function render(tab){
-    ({ teaching: HS.renderTeaching, materials: HS.renderMaterials, source: renderSource, script: renderScript, video: renderVideo, story: renderStory, map: renderMap, board: renderBoard, chalk: renderChalk, upload: HS.renderUpload, lesson: HS.renderLesson, shots: HS.renderShots, settings: renderSettings })[tab]();
+    ({ studio: HS.renderSceneStudio, teaching: HS.renderTeaching, materials: HS.renderMaterials, source: renderSource, script: renderScript, video: renderVideo, story: renderStory, map: renderMap, board: renderBoard, chalk: renderChalk, upload: HS.renderUpload, lesson: HS.renderLesson, shots: HS.renderShots, settings: renderSettings })[tab]();
   }
   HS.onChange(function(what){ if(what === 'all') { $('proj-title').value = P().title || ''; render(current); drawProjects(); } });
 
@@ -884,10 +884,10 @@
   HS.ready.then(function(){
     $('proj-title').value = P().title || '';
     drawProjects();
-    var startTab='teaching';
-    try{startTab=localStorage.getItem('hs.tab')||'teaching';}catch(e){}
-    if(startTab==='materials')startTab='teaching';
-    show(document.getElementById('tab-'+startTab)?startTab:'teaching');
+    var startTab='studio';
+    try{startTab=localStorage.getItem('hs.tab')||'studio';}catch(e){}
+    if(startTab==='materials'||startTab==='teaching')startTab='studio';
+    show(document.getElementById('tab-'+startTab)?startTab:'studio');
     document.body.setAttribute('data-ready', '1');
   });
   // 웹 글꼴이 늦게 오면 캔버스를 다시 그립니다

@@ -25,7 +25,8 @@ Never rewrite older entries; correct them in a new entry.
 
 ## What this is
 A static web app that helps a Korean high-school history teacher make history YouTube videos.
-Primary workflow: finished narration → editable material proposal → explicit user confirmation →
+Primary workflow: narration → Codex semantic scene boundaries → human split/merge review → one slide per scene (text/board/image) → human approval → PNG/PPT.
+Legacy material workflow remains: finished narration → editable material proposal → explicit user confirmation →
 local Codex CLI generation/preview or subscription image order/import, separate illustration/map/quote/comparison/board PNG ZIPs, story PPTX and board PPTX.
 The user prefers Codex/ChatGPT subscriptions, not paid API automation. Do not rewrite finished narration or generate
 all illustrations before the proposal is confirmed. Video rendering is a secondary legacy tool.
@@ -46,7 +47,7 @@ This repo was started from the same author's 어전회의 (eojeon) project and f
 ```
 npm run setup     # npm install + npx playwright install chromium (needs internet)
 npm run check     # syntax of every script + index.html script list (offline, a second)
-npm test          # node tests/e2e.mjs — 81 Playwright tests (Chromium runs with a fake microphone);
+npm test          # node tests/e2e.mjs — 83 Playwright tests (Chromium runs with a fake microphone);
                   # Claude / OpenAI / Gemini / YouTube oEmbed are all mocked, so no keys or network are needed
 ```
 Codex sandboxes usually have no network while the agent runs: do `npm run setup` in the environment's setup
@@ -151,7 +152,7 @@ Drawing code sizes things by `Math.min(w, h) / 720` so the same code serves 16:9
 - `exportTeachingPack`: snapshots selected scenes and map; exports ready base, optional title, marks and crop PNGs + JSON/TXT source manifest with skipped reasons. `exportTeachingPptx`: selected scenes must all be ready, same sequence, right speaker space, editable caption, full narration/source notes. Existing storyboard exports remain available separately.
 - Reconfirming material plans preserves teaching settings for matching material IDs with unchanged narration. Changing imagery invalidates annotations by fingerprint. A stale material plan blocks exports.
 - `docs/CHANNEL_ANALYSIS.md`: observational sample of all 10 public videos, not whole-channel full-duration viewing or historical fact validation.
-- `TEST_FILTER='강의 자료:' npm test` runs the focused teaching tests. Full `npm test` still required before committing (now 81 cases).
+- `TEST_FILTER='강의 자료:' npm test` runs the focused teaching tests. Full `npm test` still required before committing (now 83 cases).
 
 - Teaching readiness is metadata-based (image decode still happens at preview/export). `checkedBasis` binds the user source confirmation to the rendered source; changed sources are unverified. Explicit missing shot selections never fall back to unrelated scene images. `tools/screens.mjs` also captures the teaching readiness UI.
 
@@ -159,4 +160,11 @@ Drawing code sizes things by `Math.min(w, h) / 720` so the same code serves 16:9
 
 - `HS.replaceTeachingImage(scene,image)` requires an undo snapshot before replacing/removing an uploaded photo and clearing its credit. Snapshot failure or concurrent project/settings edits leave the existing photo untouched. UI uploads use a revision token so earlier reads cannot replace newer selections.
 
-- Teaching is the default main workspace. Legacy saved `materials` opens teaching; other saved tabs still resume. Empty projects accept a script in teaching, then hand off to the existing proposal/review/explicit-confirm flow. Scene navigation, original narration/brief, readiness filters/search and expected PNG count are workspace UI state; filtering never changes export selection.
+- Legacy teaching remains available in `teaching`; the current main is `studio`. Legacy saved `materials`/`teaching` opens studio; other saved tabs still resume. Empty projects accept a script in teaching, then hand off to the existing proposal/review/explicit-confirm flow. Scene navigation, original narration/brief, readiness filters/search and expected PNG count are workspace UI state; filtering never changes export selection.
+
+## Scene-by-scene studio (current main)
+- `assets/scene-studio.js` / `scene-studio-ui.js`, tab `studio`, are the main authoring flow. `project.studio={script,analyzedScript,method,mode(input|review|compose),backMode?,slides[]}` is independent of legacy scenes/materials. Slides store id,start,end (exact contiguous original offsets),title,reason,type(text|board|image),content,prompt,image,imagePrompt,credit,reviewed,candidates (max3). Backups/undo retain this state; snapshot handles projects with studio slides only.
+- Semantic analysis sends numbered sentence units to the existing CLI bridge with kind=analysis. Model outputs increasing inclusive 1-based end unit indices, titles/reasons/types/content/prompts. Client validates full coverage and bounds atomically; original narration is never rewritten. Paragraph fallback is explicitly labeled non-AI. Max12000 chars,500 units,80 slides. Split/merge only in review; affected slides reset with undo.
+- Composition is one scene/one slide. Review binds to content fingerprint. Changes invalidate review. Image generation affects only the selected scene, requires explicit click, and rejects stale project/slide completion. Archives remain available via local bridge. All slides must be reviewed for whole-deck PNG/PPT exports; one raster slide each, narration in notes.
+- `/api/jobs` accepts kind image(default)|analysis; same token/origin checks, serial execution and cancellation. Analysis uses result.json in isolated CLI workspace; archives `output/codex-plans`. Image behavior is preserved. `npm run test:cli` required for server changes (3 tests currently).
+- Real short-narration CLI analysis verified this turn; image UI bridge tested with fake generator, not a newly generated actual image.
