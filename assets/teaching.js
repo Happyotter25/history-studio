@@ -16,6 +16,18 @@
     if(!s.teaching)s.teaching={kind:'auto',image:null,credit:'',url:'',rights:'확인 필요',checked:false,caption:s.heading||'',quote:(s.data&&s.data.translation)||'',marks:[],crop:null,basis:''};
     return s.teaching;
   };
+  var replacing=false;
+  HS.replaceTeachingImage=function(s,image){
+    if(replacing)return Promise.reject(new Error('앞선 사진 변경을 저장하고 있습니다. 잠시 기다려 주세요.'));
+    var p=HS.project,t=HS.teachingSettings(s),before=JSON.stringify(t);
+    if(p.scenes.indexOf(s)<0)return Promise.reject(new Error('현재 프로젝트의 구간을 다시 선택해 주세요.'));
+    replacing=true;
+    return Promise.resolve().then(function(){return HS.snapshot(image?'강의 자료 사진 변경 전':'강의 자료 사진 해제 전',true);}).then(function(){
+      if(HS.project!==p||p.scenes.indexOf(s)<0||s.teaching!==t||JSON.stringify(t)!==before)throw new Error('저장 중 자료가 바뀌어 사진 변경을 중단했습니다. 다시 시도해 주세요.');
+      t.image=image;if(image&&!/^(photo|artifact|illust)$/.test(t.kind))t.kind='photo';
+      t.checked=false;t.checkedBasis='';t.credit='';t.url='';t.rights='확인 필요';HS.changed('teaching');
+    }).finally(function(){replacing=false;});
+  };
   function kind(s,t){return t.kind==='auto'?(s.kind==='source'?'quote':s.kind==='map'?'map':HS.isDataScene(s)?'data':'illust'):t.kind;}
   function imageFor(s,t,k){
     if(t.image)return t.image;

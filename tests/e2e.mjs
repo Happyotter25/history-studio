@@ -1520,6 +1520,20 @@ await test('강의 자료: 확대 후 구간 이동·다시 그리기·오류 �
   await pg.context().close();
 });
 
+await test('강의 자료: 사진 변경 복원·저장 실패·동시 수정 보호',async()=>{
+  const pg=await materialFixture(true);
+  const r=await pg.evaluate(async()=>{
+    const s=HS.project.scenes[0],t=HS.teachingSettings(s);t.image='old photo';t.credit='박물관';t.checked=true;t.marks=[{type:'circle',x:.1,y:.1,x2:.4,y2:.4}];
+    await HS.replaceTeachingImage(s,'new photo');const cleared=t.credit===''&&!t.checked;
+    await HS.restoreSnapshot(0);const restored=HS.project.scenes[0].teaching;
+    const snap=HS.snapshot;HS.snapshot=()=>Promise.reject(new Error('저장 실패'));let error='';try{await HS.replaceTeachingImage(HS.project.scenes[0],null);}catch(e){error=e.message;}
+    const kept=HS.project.scenes[0].teaching.image==='old photo';
+    let release;HS.snapshot=()=>new Promise(r=>release=r);const changing=HS.replaceTeachingImage(HS.project.scenes[0],null);await Promise.resolve();
+    HS.project.scenes[0].teaching.credit='수정 중';release();let stale='';try{await changing;}catch(e){stale=e.message;}HS.snapshot=snap;
+    return {cleared,image:restored.image,marks:restored.marks.length,error,kept,stale,credit:restored.credit};
+  });assert.ok(r.cleared&&r.kept);assert.equal(r.image,'old photo');assert.equal(r.marks,1);assert.match(r.error,/저장 실패/);assert.match(r.stale,/저장 중 자료/);assert.equal(r.credit,'수정 중');await pg.context().close();
+});
+
 await browser.close();
 const bad = results.filter(r => !r[0]);
 console.log(`\n${results.length - bad.length} / ${results.length} 통과`);

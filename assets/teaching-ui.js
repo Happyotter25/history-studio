@@ -1,6 +1,6 @@
 (function(){
   'use strict';
-  var HS=window.HS,$=HS.$,selected=0,prepared=null,revision=0,drag=null,history=[],busy=false;
+  var HS=window.HS,$=HS.$,selected=0,prepared=null,revision=0,drag=null,history=[],busy=false,uploadRevision=0;
   var c=$('teaching-canvas'),ctx=c.getContext('2d');
   function scene(){return HS.project.scenes[selected];}
   function status(t,err){$('teaching-status').textContent=t||'';$('teaching-status').classList.toggle('err',!!err);}
@@ -49,15 +49,15 @@
   ['credit','url','rights','caption','quote'].forEach(function(k){$('teaching-'+k).oninput=function(){HS.teachingSettings(scene())[k]=this.value;changed();if(k==='url')link();if(k==='quote'||k==='credit')draw();else paint();};});
   ['checked','include','intro'].forEach(function(k){$('teaching-'+k).onchange=function(){var t=HS.teachingSettings(scene());t[k]=this.checked;if(k==='checked')t.checkedBasis=this.checked?HS.teachingSpec(scene()).basis:'';changed();draw();};});
   $('teaching-file').onchange=function(){
-    var f=this.files[0];this.value='';if(!f)return;var p=HS.project,s=scene(),t=HS.teachingSettings(s),old=t.image;
+    var f=this.files[0];this.value='';if(!f)return;var p=HS.project,s=scene(),t=HS.teachingSettings(s),old=t.image,upload=++uploadRevision;
     if(!/^image\/(png|jpeg|webp)$/.test(f.type)||f.size>20*1024*1024){status('PNG·JPG·WebP 파일을 20MB 이하로 넣어 주세요.',true);return;}
     status('자료를 읽고 있습니다…');
     HS.readFile(f).then(function(u){return HS.shrinkImage(u,2400,'image/png');}).then(function(u){
-      if(HS.project!==p||scene()!==s||t!==s.teaching||t.image!==old)throw new Error('읽는 동안 구간이 바뀌어 불러오기를 중단했습니다.');
-      t.image=u;if(!/^(photo|artifact|illust)$/.test(t.kind))t.kind='photo';t.checked=false;t.credit='';t.url='';t.rights='확인 필요';changed();HS.renderTeaching();
+      if(upload!==uploadRevision||HS.project!==p||scene()!==s||t!==s.teaching||t.image!==old)throw new Error('읽는 동안 구간이 바뀌어 불러오기를 중단했습니다.');
+      return HS.replaceTeachingImage(s,u).then(function(){if(HS.project===p&&scene()===s){HS.renderTeaching();HS.toast('사진을 넣었습니다. 이전 자료는 상단 되돌리기에서 복원할 수 있습니다.');}});
     }).catch(function(e){status(e.message,true);});
   };
-  $('teaching-remove').onclick=function(){var t=HS.teachingSettings(scene());t.image=null;clearCredit(t);changed();HS.renderTeaching();};
+  $('teaching-remove').onclick=function(){var p=HS.project,s=scene();++uploadRevision;status('이전 자료를 복원 기록에 저장하고 있습니다…');HS.replaceTeachingImage(s,null).then(function(){if(HS.project===p&&scene()===s){HS.renderTeaching();HS.toast('사진을 해제했습니다. 상단 되돌리기에서 복원할 수 있습니다.');}}).catch(function(e){status(e.message,true);});};
   $('teaching-view').onchange=function(){status('');paint();};
   $('teaching-tool').onchange=function(){$('teaching-view').value='marked';status('화면을 끌어 새 표시나 확대 영역을 지정하세요.');paint();};
   function saveHistory(t){history.push({marks:JSON.parse(JSON.stringify(t.marks)),crop:t.crop?JSON.parse(JSON.stringify(t.crop)):null,basis:t.basis});if(history.length>30)history.shift();}
