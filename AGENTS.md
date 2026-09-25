@@ -4,6 +4,13 @@ Read this first. It is written for any coding agent — OpenAI Codex (CLI / clou
 (`CLAUDE.md` points here), or others. The user-facing guide is `README.md` (Korean); the user's guide
 to connecting Codex is `docs/CODEX.md`.
 
+## Start here: the work log
+Codex and Claude Code take turns on this project. **Before you start, read `docs/HANDOFF.md`** (newest entry first:
+what was done, what is verified / not verified, what is next). **Before you finish, add one entry at the top of its
+"기록" section** in the template given there — in Korean, short and factual, separating what you verified from what you
+could not (mocked-only counts as not verified), and listing concrete next steps. Commit it with your work.
+Never rewrite older entries; correct them in a new entry.
+
 ## Working agreement (all agents)
 - Talk to the user in Korean, plainly (they are a history teacher, not a developer). Proceed without many questions.
 - Before every commit: `npm run check` (syntax, offline) and `npm test` (Playwright end-to-end). Both must pass.
@@ -13,6 +20,8 @@ to connecting Codex is `docs/CODEX.md`.
 - Don't edit generated/vendored files by hand: `content/geo.js`, `assets/vendor/*`.
 - Keep `README.md` (Korean, for the user) and this file in sync when you add features or change the data model.
 - Work on a branch and let the user merge; `main` is what the user downloads as ZIP.
+- One agent at a time: before starting, make sure the previous agent's work is merged into `main` and pull it.
+  If `docs/HANDOFF.md`'s newest entry mentions an unmerged branch, tell the user before building on top of it.
 
 ## What this is
 A static web app that helps a Korean high-school history teacher make history YouTube videos.

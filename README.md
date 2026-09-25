@@ -142,7 +142,8 @@
 ## 개발 · Codex로 고치기
 
 OpenAI **Codex**(CLI 또는 웹)로 이 저장소를 고칠 수 있습니다. 접속 방법은 [`docs/CODEX.md`](docs/CODEX.md)에 한국어로 차례대로 적어 두었습니다.
-Codex·Claude Code 같은 코딩 에이전트는 [`AGENTS.md`](AGENTS.md)를 작업 안내서로 읽습니다.
+Codex·Claude Code 같은 코딩 에이전트는 [`AGENTS.md`](AGENTS.md)를 작업 안내서로 읽고, 번갈아 작업할 때는
+[`docs/HANDOFF.md`](docs/HANDOFF.md)(작업 일지)에 한 일·확인한 것·다음 할 일을 남깁니다. 진행 상황도 이 파일에서 볼 수 있습니다.
 
 ```
 npm run setup        # 처음 한 번: 필요한 프로그램과 시험용 브라우저 설치

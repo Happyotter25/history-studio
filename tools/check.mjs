@@ -12,5 +12,10 @@ for (const f of files) {
 // index.html 이 부르는 스크립트가 모두 있는지
 const html = fs.readFileSync('index.html', 'utf8');
 for (const m of html.matchAll(/<script src="([^"]+)"/g)) if (!fs.existsSync(m[1])) { bad++; console.log('✗ index.html 이 부르는 파일이 없음:', m[1]); }
+// 작업 일지: "기록" 아래에 기록이 하나 이상, 각 기록에 네 칸이 있는지
+const log = fs.existsSync('docs/HANDOFF.md') ? fs.readFileSync('docs/HANDOFF.md', 'utf8') : '';
+const entries = log.split('\n## 기록')[1] ? log.split('\n## 기록')[1].split(/\n### /).slice(1) : [];
+if (!entries.length) { bad++; console.log('✗ docs/HANDOFF.md 에 작업 기록이 없음'); }
+entries.forEach((e, i) => ['**한 일', '**확인한 것', '**확인하지 못한 것', '**다음 할 일'].forEach(h => { if (!e.includes(h)) { bad++; console.log(`✗ HANDOFF 기록 ${i + 1}(${e.split('\n')[0]})에 "${h.slice(2)}" 칸이 없음`); } }));
 console.log(bad ? `\n${bad}곳 문제` : `✓ ${files.length}개 파일 문법 이상 없음`);
 process.exit(bad ? 1 : 0);
