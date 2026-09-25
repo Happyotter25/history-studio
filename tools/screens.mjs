@@ -24,4 +24,8 @@ await pg.click('#chalk-to-board');
 await pg.locator('#tab-chalk .grid2').screenshot({ path: path.join(root, 'docs/chalk.png') });
 await pg.click('#tabs button[data-tab=board]'); await pg.waitForTimeout(300);
 await pg.locator('#board-canvas').screenshot({ path: path.join(root, 'docs/board.png') });
+await pg.evaluate(() => { HS.uploadSimple(); HS.project.thumb = { scene: 3, main: '임진왜란\n7년 전쟁', sub: '한국사 10분 정리', color: 'yellow', layout: 'left' }; HS.changed('upload'); });
+await pg.click('#tabs button[data-tab=upload]'); await pg.waitForTimeout(400);
+await pg.screenshot({ path: path.join(root, 'docs/upload.png') });
+await pg.locator('#thumb-canvas').screenshot({ path: path.join(root, 'docs/thumbnail.png') });
 await b.close();

@@ -20,7 +20,7 @@ This repo was started from the same author's 어전회의 (eojeon) project and f
 ## Test (run before every commit)
 ```
 npm install
-npm test          # node tests/e2e.mjs — 21 Playwright tests, Claude API is mocked (SSE, routed by system prompt)
+npm test          # node tests/e2e.mjs — 26 Playwright tests, Claude API is mocked (SSE, routed by system prompt)
 ```
 `CHROMIUM_PATH=/path/to/chromium npm test` uses a specific browser.
 Headless Chromium renames non-ASCII download names to `download`; tests read the name
@@ -38,8 +38,9 @@ the app chose by wrapping `HS.download`.
 | `assets/voice.js` | Per-scene narration audio (mic via MediaRecorder or file), `HS.playNarration` schedules it on the timeline (speakers or a MediaStream destination for recording) |
 | `assets/video.js` | Timeline (voice length drives scene length), Ken Burns / SVG parallax / map scenes + crossfade + subtitles (`HS.drawVideoFrame`), `HS.recordCanvas` (MediaRecorder → WebM, optional audio) |
 | `assets/map.js` | Equirectangular map on Natural Earth coastlines, regions (shaded polygons), places, animated route arrows (`HS.drawMap`, `HS.mapView`, `HS.mapUnproject`) |
-| `assets/chalk.js` | Adaptive-threshold ink extraction + chalk texture (`HS.convertToChalk`), drawing-reveal animation (`HS.drawChalkReveal`) |
+| `assets/chalk.js` | Adaptive-threshold ink extraction + chalk texture (`HS.convertToChalk`), drawing-reveal animation (`HS.drawChalkReveal`), photo stroke tracing (`HS.traceStrokes`: Zhang-Suen thinning + nearest-next ordering) |
 | `assets/export.js` | PPTX export via PptxGenJS: `HS.exportStoryPptx`, `HS.exportBoardPptx` |
+| `assets/upload.js` | ⑧ tab: `HS.srt` (from `HS.subtitleCues`, same timing as burned-in subtitles), `HS.chapters`, `HS.generateUploadAI` / `HS.uploadSimple`, `HS.drawThumbnail`; wires its own UI |
 | `assets/ui.js` | Wires tabs, inputs and buttons |
 | `content/places.js` | Gazetteer (name, aliases, lon/lat, kind) used by offline map extraction — extend freely |
 | `content/sample.js` | Sample source (임진왜란) |
@@ -57,7 +58,8 @@ the app chose by wrapping `HS.download`.
   board:[{title, text, drawing(dataURL|null), dw, dh}],
   map:{title, view([lon0,lat0,lon1,lat1]|null=auto), places:[{name,lon,lat,kind}], routes:[{from,to,label}],
        regions:[{name,color,points:[[lon,lat],...]}]},
-  checks:{at, summary, items:[{scene(1-based), claim, verdict(ok|unsupported|wrong|debated), note, quote}]}|null }
+  checks:{at, summary, items:[{scene(1-based), claim, verdict(ok|unsupported|wrong|debated), note, quote}]}|null,
+  upload:{titles, description, tags, thumbTexts, pinned}|null, thumb:{scene, main, sub, color, layout}|null }
 ```
 Scene picture priority: `useMap` → `image` → `svg` → procedural background.
 Startup is async: wait for `HS.ready` (the UI sets `body[data-ready]` when done).
@@ -67,7 +69,7 @@ kind ∈ capital|city|battle. Keep `HS.SCRIPT_SCHEMA` in sync when changing fiel
 ## Conventions
 - Plain ES5-style browser JS, no frameworks or bundler. Must keep working from `file://`.
 - UI text and comments are Korean (polite 해요체/합니다체 in the UI).
-- `localStorage` keys are prefixed `hs.` (project, key, model, cost, tab). Backups never include `hs.key`.
+- `localStorage` keys are prefixed `hs.` (key, model, cost, tab, format). The project itself lives in IndexedDB. Backups never include `hs.key`.
 - Keep the mobile layout free of horizontal overflow (tested).
 - After visual changes, look at screenshots (`node tools/screens.mjs`), not just the tests.
 
@@ -76,4 +78,5 @@ kind ∈ capital|city|battle. Keep `HS.SCRIPT_SCHEMA` in sync when changing fiel
 - Cloud TTS (e.g. a Korean TTS API) so narration can be generated instead of recorded.
 - Prepared historical-border datasets per era instead of hand-drawn/AI-approximated regions.
 - Photo drawings: vectorize (skeleton → strokes) so they animate stroke by stroke like pad drawings.
-- MP4 export (WebM → MP4 needs ffmpeg.wasm; large download).
+- MP4 is recorded natively when `MediaRecorder` supports it (setting `hs.format`); otherwise WebM. A WebM→MP4 converter would need ffmpeg.wasm (large).
+- Thumbnail: face/character cut-outs, more layouts, A/B variants.

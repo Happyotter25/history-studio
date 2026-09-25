@@ -100,6 +100,84 @@
     m.globalCompositeOperation = 'source-in';
     m.drawImage(chalk, 0, 0);
     ctx.drawImage(mask, 0, 0);
+    // 끝무렵에는 획이 못 덮은 곳(넓게 칠한 곳 등)까지 온전한 그림으로 채웁니다
+    if(progress > 0.9){ ctx.globalAlpha = Math.min(1, (progress - 0.9) / 0.1); ctx.drawImage(chalk, 0, 0); ctx.globalAlpha = 1; }
+  };
+
+  /* 사진 그림의 획 찾기 — 선을 한 화소 두께의 뼈대로 가늘게 한 뒤(Zhang-Suen), 뼈대를 따라 걸으며 획으로 만듭니다.
+   * 획은 앞 획이 끝난 곳에서 가까운 것부터 이어 그려, 사람이 그리는 순서처럼 보이게 합니다. */
+  function thin(img, w, h){
+    var changed = true, del = [], P = function(x, y){ return img[y * w + x]; };
+    while(changed){
+      changed = false;
+      for(var pass = 0; pass < 2; pass++){
+        del.length = 0;
+        for(var y = 1; y < h - 1; y++) for(var x = 1; x < w - 1; x++){
+          if(!img[y * w + x]) continue;
+          var p2 = P(x, y - 1), p3 = P(x + 1, y - 1), p4 = P(x + 1, y), p5 = P(x + 1, y + 1), p6 = P(x, y + 1), p7 = P(x - 1, y + 1), p8 = P(x - 1, y), p9 = P(x - 1, y - 1);
+          var B = p2 + p3 + p4 + p5 + p6 + p7 + p8 + p9;
+          if(B < 2 || B > 6) continue;
+          var A = (!p2 && p3) + (!p3 && p4) + (!p4 && p5) + (!p5 && p6) + (!p6 && p7) + (!p7 && p8) + (!p8 && p9) + (!p9 && p2);
+          if(A !== 1) continue;
+          if(pass === 0 ? (p2 * p4 * p6 || p4 * p6 * p8) : (p2 * p4 * p8 || p2 * p6 * p8)) continue;
+          del.push(y * w + x);
+        }
+        if(del.length){ changed = true; for(var i = 0; i < del.length; i++) img[del[i]] = 0; }
+      }
+    }
+    return img;
+  }
+  var NB = [[1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0], [-1, -1], [0, -1], [1, -1]];
+  HS.traceStrokes = function(mask, w, h){
+    // 큰 그림은 줄여서 계산합니다 (긴 변 400px)
+    var k = Math.max(1, Math.max(w, h) / 400), sw = Math.round(w / k), sh = Math.round(h / k), img = new Uint8Array(sw * sh);
+    for(var y = 0; y < sh; y++) for(var x = 0; x < sw; x++) img[y * sw + x] = mask[Math.min(h - 1, Math.round(y * k)) * w + Math.min(w - 1, Math.round(x * k))];
+    thin(img, sw, sh);
+    var seen = new Uint8Array(sw * sh), strokes = [];
+    function nbs(x, y){
+      var out = [];
+      for(var i = 0; i < 8; i++){ var nx = x + NB[i][0], ny = y + NB[i][1]; if(nx >= 0 && ny >= 0 && nx < sw && ny < sh && img[ny * sw + nx] && !seen[ny * sw + nx]) out.push([nx, ny]); }
+      return out;
+    }
+    function walk(x, y){
+      var pts = [[x, y]]; seen[y * sw + x] = 1;
+      for(;;){
+        var n = nbs(x, y); if(!n.length) break;
+        x = n[0][0]; y = n[0][1]; seen[y * sw + x] = 1; pts.push([x, y]);
+      }
+      return pts;
+    }
+    // 끝점(이웃이 하나)에서 먼저 출발해야 획이 가운데서 끊기지 않습니다
+    for(var round = 0; round < 2; round++) for(y = 0; y < sh; y++) for(x = 0; x < sw; x++){
+      if(!img[y * sw + x] || seen[y * sw + x]) continue;
+      if(round === 0 && nbs(x, y).length !== 1) continue;
+      var st = walk(x, y);
+      if(st.length >= 3) strokes.push(st);
+    }
+    // 가까운 획부터 차례로 (위쪽에서 시작)
+    strokes.sort(function(a, b){ return a[0][1] - b[0][1]; });
+    var ordered = [], left = strokes.slice(), cur = left.length ? [left[0][0][0], 0] : null;
+    while(left.length){
+      var best = 0, bd = Infinity, rev = false;
+      for(var i = 0; i < left.length; i++){
+        var s0 = left[i][0], s1 = left[i][left[i].length - 1];
+        var d0 = (s0[0] - cur[0]) * (s0[0] - cur[0]) + (s0[1] - cur[1]) * (s0[1] - cur[1]);
+        var d1 = (s1[0] - cur[0]) * (s1[0] - cur[0]) + (s1[1] - cur[1]) * (s1[1] - cur[1]);
+        if(d0 < bd){ bd = d0; best = i; rev = false; }
+        if(d1 < bd){ bd = d1; best = i; rev = true; }
+      }
+      var pick = left.splice(best, 1)[0];
+      if(rev) pick.reverse();
+      ordered.push(pick);
+      cur = pick[pick.length - 1];
+    }
+    // 원래 크기로 되돌리고 점을 솎아 냅니다
+    return ordered.map(function(st){
+      var out = [];
+      for(var i = 0; i < st.length; i += 2) out.push([st[i][0] * k, st[i][1] * k]);
+      var last = st[st.length - 1]; out.push([last[0] * k, last[1] * k]);
+      return out;
+    });
   };
   // 원본 캔버스 → 온전한 분필 그림(투명 바탕, 원본 크기)
   HS.chalkFull = function(srcCanvas, opt){

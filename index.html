@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>사관 스튜디오</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nanum+Pen+Script&family=Nanum+Myeongjo:wght@400;700;800&family=Noto+Sans+KR:wght@400;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nanum+Pen+Script&family=Black+Han+Sans&family=Nanum+Myeongjo:wght@400;700;800&family=Noto+Sans+KR:wght@400;700&display=swap">
 <style>
 :root{
   --bg:#f4efe4; --panel:#fffdf7; --ink:#2b2520; --muted:#7a6f63; --line:#ddd3c2;
@@ -91,6 +91,7 @@ table.places input{ width:100%; padding:4px 6px; }
   <button data-tab="map">⑤ 지도</button>
   <button data-tab="board">⑥ 판서 PPT</button>
   <button data-tab="chalk">⑦ 손그림 → 판서</button>
+  <button data-tab="upload">⑧ 업로드 준비</button>
   <button data-tab="settings">설정</button>
 </nav>
 <main>
@@ -127,6 +128,7 @@ table.places input{ width:100%; padding:4px 6px; }
     <button data-go="map"><b>⑤ 지도</b><span>지명과 이동 경로를 옛 지도 풍으로</span></button>
     <button data-go="board"><b>⑥ 판서 PPT</b><span>칠판에 분필로 쓴 듯한 요약 슬라이드</span></button>
     <button data-go="chalk"><b>⑦ 손그림 → 판서</b><span>종이에 그린 캐릭터를 칠판 그림으로</span></button>
+    <button data-go="upload"><b>⑧ 업로드 준비</b><span>자막 파일, 챕터, 제목·설명·태그, 썸네일</span></button>
   </div>
 </section>
 
@@ -259,6 +261,40 @@ table.places input{ width:100%; padding:4px 6px; }
   </div>
 </section>
 
+<section class="tab" id="tab-upload">
+  <h2>업로드 준비</h2>
+  <p class="lead">유튜브에 올릴 때 필요한 자막 파일, 챕터, 제목·설명·태그, 썸네일을 만듭니다.</p>
+  <div class="grid2">
+    <div>
+      <div class="card">
+        <b>자막과 챕터</b>
+        <p class="small">자막 파일(.srt)은 유튜브 스튜디오 → 자막 → 파일 업로드로 올리면 됩니다. 영상 속 자막과 같은 시각으로 맞춰져 있습니다.</p>
+        <div class="row"><button class="btn primary" id="up-srt">자막 .srt 받기</button><button class="btn" id="up-copy-chapters">챕터 복사</button></div>
+        <textarea id="up-chapters" readonly style="min-height:120px;margin-top:8px"></textarea>
+        <p class="small" id="up-chapter-note"></p>
+      </div>
+      <div class="card">
+        <div class="row"><b style="flex:1">제목 · 설명 · 태그</b><button class="btn primary" id="up-generate">만들기</button></div>
+        <span class="status" id="up-status"></span>
+        <div id="up-info" style="margin-top:8px"></div>
+      </div>
+    </div>
+    <div class="card">
+      <b>썸네일</b>
+      <canvas id="thumb-canvas" width="1280" height="720" style="margin-top:8px"></canvas>
+      <div class="row" style="margin-top:8px">
+        <label class="inline">배경 <select id="thumb-scene"></select></label>
+        <label class="inline">색 <select id="thumb-color"><option value="yellow">노랑</option><option value="red">빨강</option><option value="white">흰색</option></select></label>
+        <label class="inline">글씨 자리 <select id="thumb-layout"><option value="left">왼쪽</option><option value="right">오른쪽</option></select></label>
+      </div>
+      <label class="small" style="display:block;margin-top:8px">큰 글씨 (줄 바꿈으로 두 줄)<textarea id="thumb-main" style="min-height:60px"></textarea></label>
+      <label class="small" style="display:block">작은 글씨<input type="text" id="thumb-sub" style="width:100%" placeholder="예: 한국사 10분 정리"></label>
+      <div id="thumb-suggest" class="row" style="margin-top:8px"></div>
+      <div class="row" style="margin-top:8px"><button class="btn primary" id="thumb-png">썸네일 PNG 받기</button></div>
+    </div>
+  </div>
+</section>
+
 <section class="tab" id="tab-settings">
   <h2>설정</h2>
   <div class="card">
@@ -268,6 +304,7 @@ table.places input{ width:100%; padding:4px 6px; }
       <select id="cfg-model"><option value="claude-opus-5">Claude Opus 5</option><option value="claude-sonnet-5">Claude Sonnet 5</option><option value="claude-haiku-4-5">Claude Haiku 4.5</option></select>
       <button class="btn primary" id="cfg-save">저장</button>
     </div>
+    <div class="row" style="margin-top:8px"><label class="inline">영상 녹화 형식 <select id="cfg-format"><option value="mp4">MP4 (브라우저가 지원하면)</option><option value="webm">WebM</option></select></label></div>
     <p class="small">키는 이 브라우저(localStorage)에만 저장되며 프로젝트 백업 파일에는 들어가지 않습니다. 요청은 브라우저에서 Anthropic으로 바로 갑니다. <span id="cfg-cost"></span></p>
   </div>
   <div class="card">
@@ -296,6 +333,7 @@ table.places input{ width:100%; padding:4px 6px; }
 <script src="assets/video.js"></script>
 <script src="assets/chalk.js"></script>
 <script src="assets/export.js"></script>
+<script src="assets/upload.js"></script>
 <script src="assets/ui.js"></script>
 </body>
 </html>

@@ -51,11 +51,14 @@ const REWRITE_ANSWER = { heading: '짧아진 장면', narration: '짧게 고친 
 const CHECK_ANSWER = { summary: '대체로 소스와 맞으나 한 곳은 소스에 없습니다.', items: [
   { scene: 1, claim: '남은 배는 13척', verdict: 'ok', note: '', quote: '13척' },
   { scene: 2, claim: '물살이 빠르다', verdict: 'unsupported', note: '소스에 물살 이야기가 없습니다.', quote: '' }] };
+const UPLOAD_ANSWER = { titles: ['13척으로 이긴 명량 해전', '이순신은 왜 울돌목을 골랐나', 'b', 'c', 'd'], description: '명량 해전을 정리합니다.\n\n#한국사',
+  tags: ['명량 해전', '이순신', '한국사'], thumbnail_texts: ['13척의\n기적', '울돌목'], pinned_comment: '여러분이라면 어디서 싸웠을까요?' };
 function answerFor(body) {
   const sys = typeof body.system === 'string' ? body.system : JSON.stringify(body.system);
   if (sys.includes('삽화가')) return SVG_ANSWER;
   if (sys.includes('장면 하나만 고친다')) return REWRITE_ANSWER;
   if (sys.includes('사실 확인 담당')) return CHECK_ANSWER;
+  if (sys.includes('업로드 정보')) return UPLOAD_ANSWER;
   return AI_ANSWER;
 }
 
@@ -90,7 +93,7 @@ console.log('사관 스튜디오 시험');
 await test('처음 열면 오류 없이 소스 탭이 보인다', async () => {
   const page = await open();
   assert.ok(await page.isVisible('#tab-source'));
-  for (const t of ['script', 'video', 'story', 'map', 'board', 'chalk', 'settings', 'source']) await page.click(`#tabs button[data-tab=${t}]`);
+  for (const t of ['script', 'video', 'story', 'map', 'board', 'chalk', 'upload', 'settings', 'source']) await page.click(`#tabs button[data-tab=${t}]`);
   assert.deepEqual(page.errors, []);
   await page.context().close();
 });
@@ -129,7 +132,7 @@ await test('삽화 영상 프레임을 그리고 짧게 녹화할 수 있다', a
   });
   assert.ok(r.px[0] + r.px[1] + r.px[2] > 0, '검은 화면');
   assert.ok(r.size > 0, '녹화 비어 있음');
-  assert.equal(r.type, 'video/webm');
+  assert.ok(['video/webm', 'video/mp4'].includes(r.type), r.type);
   assert.ok(r.total > 20);
 });
 
@@ -310,7 +313,7 @@ await test('목소리: 소리 파일을 넣으면 길이가 맞춰지고 녹화�
     const c = document.getElementById('video-canvas'), ctx = c.getContext('2d');
     const blob = await HS.recordCanvas(c, 1.5, t => HS.drawVideoFrame(ctx, 1280, 720, t, {}), null, dest => HS.playNarration(HS.timeline()[2].start, dest));
     const text = new TextDecoder('latin1').decode(new Uint8Array(await blob.arrayBuffer()));
-    return { dur: s.audioDur, sceneDur: HS.sceneDuration(s), opus: text.includes('A_OPUS') };
+    return { dur: s.audioDur, sceneDur: HS.sceneDuration(s), opus: /A_OPUS|Opus|mp4a/.test(text) };
   });
   assert.ok(Math.abs(r.dur - 1.5) < 0.05, '길이 ' + r.dur);
   assert.ok(Math.abs(r.sceneDur - (Math.max(3, 1.5 + 0.6 + 0.5) + 0.8)) < 0.05, '장면 길이 ' + r.sceneDur);
@@ -367,6 +370,89 @@ await test('손그림이 획 순서대로 그려지는 영상을 녹화한다', 
   assert.ok(fs.statSync(await d.path()).size > 1000);
 });
 
+await test('업로드 준비: 자막 SRT·챕터가 영상 시각과 맞는다', async () => {
+  await ai.click('#tabs button[data-tab=upload]');
+  const r = await ai.evaluate(() => ({ srt: HS.srt(), cues: HS.subtitleCues(), ch: HS.chapters(), tl: HS.timeline(), total: HS.totalDuration() }));
+  const blocks = r.srt.trim().split(/\n\n/);
+  assert.equal(blocks.length, r.cues.length);
+  assert.match(blocks[0], /^1\n\d\d:\d\d:\d\d,\d{3} --> \d\d:\d\d:\d\d,\d{3}\n/);
+  for (let i = 1; i < r.cues.length; i++) assert.ok(r.cues[i].start >= r.cues[i - 1].start && r.cues[i].end > r.cues[i].start);
+  assert.equal(r.ch[0].start, 0);
+  for (let i = 1; i < r.ch.length; i++) assert.ok(r.ch[i].start - r.ch[i - 1].start >= 10);
+  const { name, buf } = await download(ai, '#up-srt');
+  assert.match(name, /자막\.srt$/);
+  assert.ok(buf.toString('utf8').includes('-->'));
+});
+
+await test('업로드 준비: 제목·설명·태그를 짓고 설명에 챕터가 붙는다', async () => {
+  await ai.click('#up-generate');
+  await ai.waitForSelector('#up-desc');
+  const desc = await ai.inputValue('#up-desc');
+  assert.ok(desc.startsWith('명량 해전을 정리합니다.'));
+  assert.ok(desc.includes('0:00 '), '챕터 없음');
+  assert.equal(await ai.inputValue('#up-tags'), '명량 해전, 이순신, 한국사');
+  assert.equal(await ai.inputValue('#thumb-main'), '13척의\n기적');
+});
+
+await test('썸네일 PNG를 받는다 (고른 색 글씨가 그려짐)', async () => {
+  await ai.selectOption('#thumb-color', 'red');
+  const reds = await ai.evaluate(async () => {
+    await HS.preloadImages();
+    const c = document.createElement('canvas'); c.width = 640; c.height = 360;
+    HS.drawThumbnail(c.getContext('2d'), 640, 360, HS.project.thumb);
+    const d = c.getContext('2d').getImageData(0, 0, 640, 360).data; let n = 0;
+    for (let i = 0; i < d.length; i += 4) if (d[i] > 230 && d[i + 1] < 100 && d[i + 2] < 90) n++;
+    return n;
+  });
+  assert.ok(reds > 500, '빨간 글씨 화소 ' + reds);
+  const { name, buf } = await download(ai, '#thumb-png');
+  assert.match(name, /썸네일\.png$/);
+  assert.equal(buf.slice(1, 4).toString(), 'PNG');
+});
+
+await test('사진 손그림도 선을 따라 획 순서로 그려진다', async () => {
+  await ai.click('#tabs button[data-tab=chalk]');
+  // 원 두 개가 그려진 "사진"을 만들어 파일로 넣습니다
+  const png = await ai.evaluate(() => {
+    const c = document.createElement('canvas'); c.width = 600; c.height = 400; const x = c.getContext('2d');
+    x.fillStyle = '#f4f1ea'; x.fillRect(0, 0, 600, 400); x.strokeStyle = '#333'; x.lineWidth = 7;
+    x.beginPath(); x.arc(170, 200, 110, 0, 7); x.stroke(); x.beginPath(); x.moveTo(350, 100); x.lineTo(520, 300); x.stroke();
+    return c.toDataURL('image/png').split(',')[1];
+  });
+  await ai.setInputFiles('#chalk-file', { name: 'drawing.png', mimeType: 'image/png', buffer: Buffer.from(png, 'base64') });
+  await ai.waitForFunction(() => document.getElementById('chalk-src').width === 600);
+  const r = await ai.evaluate(() => {
+    const src = document.getElementById('chalk-src'), x = src.getContext('2d');
+    const t0 = performance.now();
+    const st = HS.traceStrokes(HS.inkMask(x.getImageData(0, 0, src.width, src.height), 14), src.width, src.height);
+    const ms = performance.now() - t0, len = st.reduce((a, s) => a + s.length, 0);
+    // 선 위의 점이어야 합니다
+    const d = x.getImageData(0, 0, src.width, src.height).data;
+    const onInk = st.flat().filter(([px, py]) => { for (let dy = -4; dy <= 4; dy++) for (let dx = -4; dx <= 4; dx++) { const i = ((Math.round(py) + dy) * src.width + Math.round(px) + dx) * 4; if (d[i] < 120) return true; } return false; }).length;
+    return { n: st.length, len, onInk, ms };
+  });
+  assert.ok(r.n >= 2 && r.n <= 12, '획 ' + r.n);
+  assert.ok(r.onInk / r.len > 0.95, '선 밖의 점 ' + JSON.stringify(r));
+  assert.ok(r.ms < 3000, '너무 느림 ' + r.ms);
+  const [d] = await Promise.all([ai.waitForEvent('download', { timeout: 40000 }), ai.click('#chalk-record')]);
+  assert.ok(fs.statSync(await d.path()).size > 1000);
+});
+
+await test('MP4를 고르면 MP4로 녹화된다 (브라우저가 지원할 때)', async () => {
+  const r = await ai.evaluate(async () => {
+    localStorage.setItem('hs.format', 'mp4');
+    const ok = MediaRecorder.isTypeSupported('video/mp4');
+    const c = document.getElementById('video-canvas'), ctx = c.getContext('2d');
+    const blob = await HS.recordCanvas(c, 1.5, t => HS.drawVideoFrame(ctx, 1280, 720, t, {}));
+    const head = new TextDecoder('latin1').decode(new Uint8Array(await blob.slice(0, 64).arrayBuffer()));
+    localStorage.setItem('hs.format', 'webm');
+    const blob2 = await HS.recordCanvas(c, 1.2, t => HS.drawVideoFrame(ctx, 1280, 720, t, {}));
+    return { ok, type: blob.type, ftyp: head.includes('ftyp'), ext: HS.videoExt(blob), type2: blob2.type };
+  });
+  if (r.ok) { assert.equal(r.type, 'video/mp4'); assert.ok(r.ftyp); assert.equal(r.ext, '.mp4'); }
+  assert.equal(r.type2, 'video/webm');
+});
+
 await test('그림·목소리가 든 프로젝트가 IndexedDB에 저장되어 다시 열어도 남는다', async () => {
   await ai.evaluate(() => HS.persist());
   await ai.reload(); await ai.waitForSelector('body[data-ready]');
@@ -380,7 +466,7 @@ await ai.context().close();
 await test('휴대폰 폭에서 가로로 넘치지 않는다', async () => {
   const pg = await open({ width: 375, height: 800 });
   await pg.click('#src-sample'); await pg.click('#btn-generate');
-  for (const t of ['source', 'script', 'video', 'story', 'map', 'board', 'chalk', 'settings']) {
+  for (const t of ['source', 'script', 'video', 'story', 'map', 'board', 'chalk', 'upload', 'settings']) {
     await pg.click(`#tabs button[data-tab=${t}]`);
     const over = await pg.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
     assert.ok(over <= 0, t + ' 탭이 ' + over + 'px 넘침');

@@ -23,7 +23,9 @@
       scenes: [],   // {heading, narration, visual, prompt, mood, motion, image, svg, audio, audioDur}
       board: [],    // {title, text, drawing, dw, dh}
       map: { title: '', view: null, places: [], routes: [], regions: [] }, // places {name, lon, lat, kind}; routes {from, to, label}; regions {name, color, points}
-      checks: null  // 사실 확인 결과
+      checks: null, // 사실 확인 결과
+      upload: null, // {titles, description, tags, thumbTexts, pinned}
+      thumb: null   // {scene, main, sub, color, layout}
     };
   };
   HS.project = HS.blankProject();

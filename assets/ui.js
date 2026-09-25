@@ -22,7 +22,7 @@
   Array.prototype.forEach.call(document.querySelectorAll('[data-go]'), function(b){ b.addEventListener('click', function(){ show(b.dataset.go); }); });
 
   function render(tab){
-    ({ source: renderSource, script: renderScript, video: renderVideo, story: renderStory, map: renderMap, board: renderBoard, chalk: renderChalk, settings: renderSettings })[tab]();
+    ({ source: renderSource, script: renderScript, video: renderVideo, story: renderStory, map: renderMap, board: renderBoard, chalk: renderChalk, upload: HS.renderUpload, settings: renderSettings })[tab]();
   }
   HS.onChange(function(what){ if(what === 'all') { $('proj-title').value = P().title || ''; render(current); } });
 
@@ -257,7 +257,7 @@
     }).then(function(){
       return HS.recordCanvas(vc, total, drawVideoAt, function(t){ status('vid-status', '녹화 중… ' + Math.floor(t) + ' / ' + Math.round(total) + '초 (탭을 바꾸지 마세요)'); },
         voiced ? function(dest){ return HS.playNarration(0, dest); } : null);
-    }).then(function(blob){ HS.download(HS.fileName(' 삽화영상.webm'), blob); status('vid-status', '녹화를 마쳤습니다 (' + Math.round(blob.size / 1024) + 'KB' + (voiced ? ', 목소리 포함' : '') + ')'); })
+    }).then(function(blob){ HS.download(HS.fileName(' 삽화영상' + HS.videoExt(blob)), blob); status('vid-status', '녹화를 마쳤습니다 (' + Math.round(blob.size / 1024) + 'KB' + (voiced ? ', 목소리 포함' : '') + ')'); })
       .catch(function(e){ status('vid-status', e.message, true); })
       .then(function(){ btn.disabled = false; });
   });
@@ -361,7 +361,7 @@
     var btn = this, dur = 2 + Math.max(1, P().map.routes.length) * 2.2;
     btn.disabled = true;
     HS.recordCanvas(mc, dur, function(t){ drawMapNow(Math.max(0, Math.min(1, (t - 1) / (dur - 2)))); }, function(t){ status('map-status', '녹화 중… ' + Math.floor(t) + '초'); })
-      .then(function(b){ HS.download(HS.fileName(' 지도.webm'), b); status('map-status', '녹화를 마쳤습니다'); })
+      .then(function(b){ HS.download(HS.fileName(' 지도' + HS.videoExt(b)), b); status('map-status', '녹화를 마쳤습니다'); })
       .catch(function(e){ status('map-status', e.message, true); })
       .then(function(){ btn.disabled = false; });
   });
@@ -402,7 +402,7 @@
         segs.forEach(function(sg){ if(now >= sg.start) seg = sg; });
         HS.drawBoardSlide(ctx, bc.width, bc.height, seg.b, seg.img, { progress: Math.min(1, (now - seg.start) / seg.write) });
       }, function(now){ status('board-status', '녹화 중… ' + Math.floor(now) + ' / ' + Math.round(t) + '초'); });
-    }).then(function(blob){ HS.download(HS.fileName(' 판서영상.webm'), blob); status('board-status', '녹화를 마쳤습니다'); drawBoardNow(); })
+    }).then(function(blob){ HS.download(HS.fileName(' 판서영상' + HS.videoExt(blob)), blob); status('board-status', '녹화를 마쳤습니다'); drawBoardNow(); })
       .catch(function(e){ status('board-status', e.message, true); })
       .then(function(){ btn.disabled = false; });
   });
@@ -414,8 +414,8 @@
   });
 
   /* ── ⑦ 손그림 → 판서 ─────────────────────────────── */
-  var cs = $('chalk-src'), co = $('chalk-out'), csx = cs.getContext('2d'), lastChalk = null, chalkTimer = null, strokes = [];
-  function clearPaper(){ csx.fillStyle = '#fff'; csx.fillRect(0, 0, cs.width, cs.height); strokes = []; }
+  var cs = $('chalk-src'), co = $('chalk-out'), csx = cs.getContext('2d'), lastChalk = null, chalkTimer = null, strokes = [], photo = false;
+  function clearPaper(){ csx.fillStyle = '#fff'; csx.fillRect(0, 0, cs.width, cs.height); strokes = []; photo = false; }
   clearPaper();
   function convert(){
     lastChalk = HS.convertToChalk(cs, co, { sens: +$('chalk-th').value, color: $('chalk-color').value, bg: $('chalk-bg').value });
@@ -432,7 +432,7 @@
       // 긴 변 1000px 안쪽으로 캔버스를 그림 비율에 맞춥니다
       var s = Math.min(1, 1000 / Math.max(img.width, img.height));
       cs.width = Math.round(img.width * s); cs.height = Math.round(img.height * s);
-      clearPaper(); csx.drawImage(img, 0, 0, cs.width, cs.height);
+      clearPaper(); csx.drawImage(img, 0, 0, cs.width, cs.height); photo = true;
       convert();
     });
   });
@@ -454,12 +454,14 @@
   $('chalk-record').addEventListener('click', function(){
     var btn = this, opt = { sens: +$('chalk-th').value, color: $('chalk-color').value };
     var full = HS.chalkFull(cs, opt), bg = $('chalk-bg').value === 'none' ? 'board' : $('chalk-bg').value;
-    var n = strokes.reduce(function(a, st){ return a + st.length; }, 0), dur = strokes.length ? Math.min(20, Math.max(3, n / 60)) : 4;
+    // 사진이면 선을 따라 획을 찾아내고, 여기서 그린 그림이면 그린 획을 그대로 씁니다
+    var order = photo ? HS.traceStrokes(HS.inkMask(csx.getImageData(0, 0, cs.width, cs.height), opt.sens), cs.width, cs.height) : strokes;
+    var n = order.reduce(function(a, st){ return a + st.length; }, 0), dur = order.length ? Math.min(25, Math.max(3, n / 60)) : 4;
     var ctx = co.getContext('2d');
     btn.disabled = true;
-    HS.recordCanvas(co, dur + 1.5, function(t){ HS.drawChalkReveal(ctx, co.width, co.height, full, strokes, Math.min(1, t / dur), bg); },
+    HS.recordCanvas(co, dur + 1.5, function(t){ HS.drawChalkReveal(ctx, co.width, co.height, full, order, Math.min(1, t / dur), bg); },
       function(t){ status('chalk-status', '녹화 중… ' + Math.floor(t) + '초'); })
-      .then(function(b){ HS.download(HS.fileName(' 그리는영상.webm'), b); status('chalk-status', '녹화를 마쳤습니다'); convert(); })
+      .then(function(b){ HS.download(HS.fileName(' 그리는영상' + HS.videoExt(b)), b); status('chalk-status', '녹화를 마쳤습니다'); convert(); })
       .catch(function(e){ status('chalk-status', e.message, true); })
       .then(function(){ btn.disabled = false; });
   });
@@ -477,14 +479,15 @@
 
   /* ── 설정 ───────────────────────────────────────── */
   function renderSettings(){
-    $('cfg-key').value = HS.CFG.key; $('cfg-model').value = HS.CFG.model;
+    $('cfg-key').value = HS.CFG.key; $('cfg-model').value = HS.CFG.model; $('cfg-format').value = HS.load('hs.format', 'mp4');
     $('cfg-cost').textContent = HS.cost.calls ? '지금까지 ' + HS.cost.calls + '번, 약 ' + Math.round(HS.cost.krw).toLocaleString() + '원 (어림).' : '';
   }
   $('cfg-save').addEventListener('click', function(){
     HS.CFG.key = $('cfg-key').value.trim(); HS.CFG.model = $('cfg-model').value;
-    HS.save('hs.key', HS.CFG.key); HS.save('hs.model', HS.CFG.model);
+    HS.save('hs.key', HS.CFG.key); HS.save('hs.model', HS.CFG.model); HS.save('hs.format', $('cfg-format').value);
     drawBadge(); HS.toast(HS.CFG.key ? 'AI를 켰습니다' : 'AI를 껐습니다 (간이 모드)');
   });
+  $('cfg-format').addEventListener('change', function(){ HS.save('hs.format', this.value); });
   $('proj-export').addEventListener('click', function(){
     // 백업에는 API 키를 넣지 않습니다 (프로젝트만)
     HS.download(HS.fileName('.json'), new Blob([JSON.stringify(P(), null, 1)], { type: 'application/json' }));

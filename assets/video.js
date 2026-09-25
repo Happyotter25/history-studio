@@ -72,21 +72,43 @@
     ctx.fillStyle = v; ctx.fillRect(0, 0, w, h);
   }
 
-  function subtitle(ctx, w, h, s, local, dur){
-    var text = (s.narration || '').trim(); if(!text) return;
-    var u = h / 720, size = Math.round(34 * u);
-    ctx.font = 'bold ' + size + 'px ' + "'Noto Sans KR',sans-serif";
-    // 문장을 두 줄 이하 덩어리로 나눠 시간에 맞춰 보여 줍니다
+  // 자막 덩어리: 문장을 화면 폭에 맞춰 두 줄 이하로 나눕니다 (화면 자막과 SRT 가 같은 기준을 씁니다)
+  var measure = null;
+  function subFont(ctx, h){ ctx.font = 'bold ' + Math.round(34 * h / 720) + 'px ' + "'Noto Sans KR',sans-serif"; }
+  function chunksOf(text){
+    if(!measure){ measure = document.createElement('canvas').getContext('2d'); }
+    subFont(measure, 720);
     var sents = text.match(/[^.!?。]+[.!?。]?\s*/g) || [text], chunks = [];
     sents.forEach(function(se){
-      var lines = HS.wrap(ctx, se.trim(), w * 0.8);
+      var lines = HS.wrap(measure, se.trim(), 1280 * 0.8);
       for(var i = 0; i < lines.length; i += 2) chunks.push(lines.slice(i, i + 2));
     });
-    var total = chunks.reduce(function(a, c){ return a + c.join('').length; }, 0) || 1;
-    var lead = s.audio ? HS.VOICE_LEAD : FADE * 0.5, span = s.audio && s.audioDur ? s.audioDur : dur - FADE, pos = Math.max(0, local - lead) / span * total, acc = 0, cur = chunks[chunks.length - 1];
-    for(var j = 0; j < chunks.length; j++){ acc += chunks[j].join('').length; if(pos <= acc){ cur = chunks[j]; break; } }
-    var lh = size * 1.35, y0 = h - 60 * u - lh * (cur.length - 1);
-    cur.forEach(function(line, i){
+    return chunks;
+  }
+  // 장면 하나의 자막 시각표 [{start, end, lines}] (영상 전체 기준 초)
+  function sceneCues(s, seg){
+    var text = (s.narration || '').trim(); if(!text) return [];
+    var chunks = chunksOf(text), total = chunks.reduce(function(a, c){ return a + c.join('').length; }, 0) || 1;
+    var lead = s.audio ? HS.VOICE_LEAD : FADE * 0.5, span = s.audio && s.audioDur ? s.audioDur : seg.dur - FADE;
+    var end = seg.start + seg.dur - FADE * 0.5, acc = 0;
+    return chunks.map(function(c, i){
+      var st = seg.start + lead + acc / total * span;
+      acc += c.join('').length;
+      return { start: st, end: i === chunks.length - 1 ? end : Math.min(end, seg.start + lead + acc / total * span), lines: c };
+    });
+  }
+  HS.subtitleCues = function(){
+    var scenes = HS.project.scenes, out = [];
+    HS.timeline().forEach(function(seg){ out = out.concat(sceneCues(scenes[seg.i], seg)); });
+    return out;
+  };
+  function subtitle(ctx, w, h, s, seg, t){
+    var cues = sceneCues(s, seg); if(!cues.length) return;
+    var cur = cues[cues.length - 1];
+    for(var j = 0; j < cues.length; j++) if(t < cues[j].end){ cur = cues[j]; break; }
+    var u = h / 720, size = Math.round(34 * u), lh = size * 1.35, y0 = h - 60 * u - lh * (cur.lines.length - 1);
+    subFont(ctx, h);
+    cur.lines.forEach(function(line, i){
       var tw = ctx.measureText(line).width, x = (w - tw) / 2, y = y0 + i * lh;
       ctx.fillStyle = 'rgba(0,0,0,.55)'; ctx.fillRect(x - 14 * u, y - size, tw + 28 * u, size * 1.3);
       ctx.fillStyle = '#fff'; ctx.fillText(line, x, y);
@@ -118,7 +140,7 @@
       ctx.restore();
       if(alpha >= 1 || seg.i === 0){
         if(seg.i === 0 && HS.project.scenes.length > 1) titleCard(ctx, w, h, scenes[0], local);
-        if(opts.subs !== false && !(seg.i === 0 && scenes.length > 1)) subtitle(ctx, w, h, scenes[seg.i], local, seg.dur);
+        if(opts.subs !== false && !(seg.i === 0 && scenes.length > 1)) subtitle(ctx, w, h, scenes[seg.i], seg, t);
       }
     });
   };
@@ -128,7 +150,9 @@
   HS.recordCanvas = function(canvas, duration, drawAt, onTick, withAudio){
     if(!window.MediaRecorder || !canvas.captureStream) return Promise.reject(new Error('이 브라우저는 영상 녹화를 지원하지 않습니다 (크롬·엣지 권장)'));
     var ac = withAudio && HS.audioCtx(), dest = ac && ac.createMediaStreamDestination();
-    var types = dest ? ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'] : ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'], mime = '';
+    // 설정에서 MP4 를 고르면(기본) 브라우저가 지원할 때 MP4 로, 아니면 WebM 으로 녹화합니다
+    var mp4 = HS.load('hs.format', 'mp4') === 'mp4' ? (dest ? ['video/mp4;codecs=avc1.42E01E,mp4a.40.2', 'video/mp4'] : ['video/mp4;codecs=avc1.42E01E', 'video/mp4']) : [];
+    var types = mp4.concat(dest ? ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'] : ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm']), mime = '';
     for(var i = 0; i < types.length; i++) if(MediaRecorder.isTypeSupported(types[i])){ mime = types[i]; break; }
     var stream = canvas.captureStream(30), chunks = [];
     if(dest) dest.stream.getAudioTracks().forEach(function(t){ stream.addTrack(t); });
@@ -136,7 +160,7 @@
     var rec = new MediaRecorder(stream, mime ? { mimeType: mime, videoBitsPerSecond: 6e6 } : undefined);
     rec.ondataavailable = function(e){ if(e.data && e.data.size) chunks.push(e.data); };
     return new Promise(function(ok, fail){
-      rec.onstop = function(){ if(stopAudio) stopAudio(); ok(new Blob(chunks, { type: 'video/webm' })); };
+      rec.onstop = function(){ if(stopAudio) stopAudio(); ok(new Blob(chunks, { type: /^video\/mp4/.test(mime) ? 'video/mp4' : 'video/webm' })); };
       rec.onerror = function(e){ fail(e.error || new Error('녹화 실패')); };
       var t0 = null;
       function frame(now){
@@ -153,4 +177,6 @@
       requestAnimationFrame(frame);
     });
   };
+
+  HS.videoExt = function(blob){ return blob && blob.type === 'video/mp4' ? '.mp4' : '.webm'; };
 })();
