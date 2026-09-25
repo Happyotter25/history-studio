@@ -83,6 +83,7 @@ function answerFor(body) {
 
 const results = [];
 async function test(name, fn) {
+  if(process.env.TEST_FILTER && !name.includes(process.env.TEST_FILTER)) return;
   try { await fn(); results.push([true, name]); console.log('  ✓', name); }
   catch (e) { results.push([false, name]); console.log('  ✗', name, '\n    ', e.message.split('\n').slice(0, 4).join('\n     ')); }
 }
@@ -1443,6 +1444,49 @@ await test('자료 제작: 확정 뒤 원고 변경·미등록 지명은 출력�
     return {stale,unknown,generic,scenes:HS.project.scenes.length};
   });
   assert.match(r.stale,/대본이 바뀌/);assert.match(r.unknown,/등록 지명/);assert.match(r.generic,/초안/);assert.equal(r.scenes,13);await pg.context().close();
+});
+
+await test('강의 자료: 사진·출처·강조·확대·PPT와 원본 교체 보호',async()=>{
+  const pg=await materialFixture(true);await pg.click('#tabs button[data-tab=teaching]');
+  const image=await pg.evaluate(()=>{const c=document.createElement('canvas');c.width=400;c.height=200;const x=c.getContext('2d');x.fillStyle='#123456';x.fillRect(0,0,400,200);x.fillStyle='#fff';x.fillRect(100,50,100,100);return c.toDataURL().split(',')[1];});
+  await pg.setInputFiles('#teaching-file',{name:'유물.png',mimeType:'image/png',buffer:Buffer.from(image,'base64')});
+  await pg.waitForFunction(()=>HS.project.scenes[0].teaching.image);
+  await pg.fill('#teaching-credit','시험 박물관');await pg.fill('#teaching-url','https://example.org/artifact');await pg.fill('#teaching-rights','직접 촬영');await pg.check('#teaching-checked');await pg.check('#teaching-intro');
+  await pg.waitForFunction(()=>!document.getElementById('teaching-png').disabled);
+  if(!await pg.locator('#teaching-add').isVisible())await pg.click('.teaching-coordinates summary');await pg.click('#teaching-add');await pg.selectOption('#teaching-tool','crop');if(!await pg.locator('#teaching-add').isVisible())await pg.click('.teaching-coordinates summary');await pg.click('#teaching-add');
+  const r=await pg.evaluate(async()=>{
+    const s=HS.project.scenes[0],t=HS.teachingSettings(s);HS.project.scenes.slice(1).forEach(s=>HS.teachingSettings(s).include=false);
+    const z=await JSZip.loadAsync(await HS.exportTeachingPack(true)),names=Object.keys(z.files).filter(n=>n.endsWith('.png'));
+    const dimensions=await Promise.all(names.map(async n=>{const b=await z.file(n).async('uint8array'),v=new DataView(b.buffer);return [v.getUint32(16),v.getUint32(20)];}));
+    const manifest=JSON.parse(await z.file('자료 목록과 출처.json').async('string'));
+    const ppt=await JSZip.loadAsync(await HS.exportTeachingPptx(true)),slides=Object.keys(ppt.files).filter(n=>/^ppt\/slides\/slide\d+\.xml$/.test(n));
+    const notes=await ppt.file('ppt/notesSlides/notesSlide1.xml').async('string');
+    const before=t.image;await HS.confirmMaterials();const kept=HS.project.scenes[0].teaching.image===before;
+    const changed=HS.teachingSettings(HS.project.scenes[0]);changed.image='data:image/png;base64,'+'';changed.kind='title';
+    const prepared=await HS.teachingPrepare(HS.project.scenes[0]);
+    return {names,dimensions,credit:manifest.materials[0],slides:slides.length,notes,kept,stale:prepared.stale};
+  });
+  assert.equal(r.names.length,4);assert.ok(r.dimensions.every(d=>d[0]===1920&&d[1]===1080));assert.equal(r.credit.credit,'시험 박물관');assert.equal(r.credit.sourceChecked,true);assert.equal(r.slides,4);assert.ok(r.notes.includes('시험 박물관'));assert.ok(r.notes.includes('오늘은'));assert.ok(r.kept&&r.stale);await pg.context().close();
+});
+await test('강의 자료: 포인터·되돌리기·저장·안전한 출처 링크',async()=>{
+  const pg=await materialFixture(true);await pg.click('#tabs button[data-tab=teaching]');await pg.selectOption('#teaching-kind','title');await pg.waitForFunction(()=>!document.getElementById('teaching-png').disabled);
+  const box=await pg.locator('#teaching-canvas').boundingBox();await pg.mouse.move(box.x+box.width*.2,box.y+box.height*.2);await pg.mouse.down();await pg.mouse.move(box.x+box.width*.6,box.y+box.height*.6);await pg.mouse.up();
+  assert.equal(await pg.evaluate(()=>HS.project.scenes[0].teaching.marks.length),1);
+  await pg.click('#teaching-undo');assert.equal(await pg.evaluate(()=>HS.project.scenes[0].teaching.marks.length),0);
+  if(!await pg.locator('#teaching-add').isVisible())await pg.click('.teaching-coordinates summary');await pg.click('#teaching-add');await pg.fill('#teaching-url','javascript:alert(1)');assert.ok(await pg.locator('#teaching-source-link').isHidden());
+  await pg.evaluate(()=>HS.persist());await pg.reload();await pg.waitForSelector('body[data-ready]');assert.equal(await pg.evaluate(()=>HS.project.scenes[0].teaching.marks.length),1);
+  await pg.setViewportSize({width:390,height:844});assert.ok(await pg.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await pg.context().close();
+});
+await test('강의 자료: 미완성 제외·인용문·제목·확정 전 출력 차단',async()=>{
+  const pg=await materialFixture(true);
+  const r=await pg.evaluate(async()=>{
+    const s=HS.project.scenes[0],t=HS.teachingSettings(s);t.kind='photo';
+    const z=await JSZip.loadAsync(await HS.exportTeachingPack(true));const report=JSON.parse(await z.file('자료 목록과 출처.json').async('string'));
+    t.kind='quote';t.quote='실제 인용문 확인';t.credit='검토용 출처';const q=await HS.teachingPrepare(s);
+    t.kind='title';const title=await HS.teachingPrepare(s);
+    HS.project.materials.script+='바뀜';let blocked='';try{await HS.exportTeachingPack(true);}catch(e){blocked=e.message;}
+    return {skipped:report.materials[0].skipped,q:q.spec.kind,title:title.spec.kind,blocked};
+  });assert.match(r.skipped,/아직 없습니다/);assert.equal(r.q,'quote');assert.equal(r.title,'title');assert.match(r.blocked,/확정/);await pg.context().close();
 });
 
 await browser.close();

@@ -134,6 +134,7 @@ table.places input{ width:100%; padding:4px 6px; }
 <nav id="tabs" aria-label="스튜디오 도구">
   <span class="nav-label">제작 워크스페이스</span>
   <button data-tab="materials" class="on">자료 제작</button>
+  <button data-tab="teaching">강의 자료 작업실</button>
   <button data-tab="shots">삽화·이미지</button>
   <button data-tab="story">스토리 PPT</button>
   <button data-tab="map">지도 PNG</button>
@@ -165,7 +166,7 @@ table.places input{ width:100%; padding:4px 6px; }
     <div class="row material-confirm"><b id="material-summary"></b><button class="btn primary" id="material-confirm">이 목록으로 확정</button></div>
   </div>
   <div class="card" id="material-output" hidden>
-    <h3>3. 자료 만들고 각각 받기</h3><p id="material-progress"></p>
+    <h3>3. 자료 만들고 각각 받기</h3><p class="small">사진·출처·강조 표시까지 준비하려면 <button class="btn" data-go="teaching">강의 자료 작업실 열기 →</button></p><p id="material-progress"></p>
     <div class="material-outputs">
       <div style="grid-column:1/-1" class="card"><h4>Codex로 그림 자동 제작</h4><p class="small">이 컴퓨터의 Codex CLI와 ChatGPT 구독을 사용합니다. 먼저 한 장을 확인한 뒤 나머지를 만드세요. 한 장씩 생성하며 완성된 그림은 자동 저장됩니다.</p><div class="row"><button class="btn" id="cli-connect">연결 확인</button><button class="btn primary" id="cli-one" disabled>한 장 먼저 만들기</button><button class="btn" id="cli-all" disabled>남은 그림 만들기</button><button class="btn" id="cli-stop" hidden>중단</button></div><p id="cli-status" class="small" role="status"></p><div id="cli-preview" class="grid2"></div></div>
       <div><h4>삽화·이미지</h4><p class="small">주문서를 Codex·ChatGPT에 전달해 그림을 만든 뒤, 파일 이름 그대로 불러오세요.</p><button class="btn primary" id="material-order">그림 주문서 받기</button> <label class="btn">만든 그림 불러오기<input id="material-images" type="file" accept="image/*" multiple hidden></label><button class="btn" data-material-export="images">완료된 삽화 PNG 받기</button><button class="btn" data-go="shots">화풍·등장인물·그림 확인</button></div>
@@ -177,6 +178,38 @@ table.places input{ width:100%; padding:4px 6px; }
   <p id="material-status" class="status" role="status" aria-live="polite"></p>
 </section>
 
+<section class="tab" id="tab-teaching">
+  <h2>강의 자료 작업실</h2><p class="lead">자료 한 장을 원본 · 강조 · 확대 화면으로. 출처와 설명 문구까지 함께 준비합니다.</p>
+  <details class="card teaching-guide"><summary>수달쌤 채널에서 가져온 제작 방식</summary><p class="small">공개 영상 10편의 대표 장면에서 확인한 구성을 반영했습니다. 왼쪽의 큰 사진·유물·지도·인용문, 오른쪽 강사, 아래 설명 문구를 배치합니다. 영상 전체를 자동 분석한 기능은 아닙니다.</p><ul><li>실물·유물 사진은 출처와 이용 조건을 기록합니다.</li><li>설명할 부분을 원·밑줄·화살표로 강조하거나 확대합니다.</li><li>주제가 바뀔 때 검은 배경의 제목 카드를 사용할 수 있습니다.</li></ul></details>
+  <p id="teaching-empty" class="card">자료 제작에서 대본의 제작 목록을 확정하면 시작할 수 있습니다. <button class="btn" data-go="materials">자료 제작으로</button></p>
+  <div id="teaching-work" hidden>
+    <div class="card row"><label>원고 구간 <select id="teaching-scene" aria-label="강의 자료 구간"></select></label><label><input type="checkbox" id="teaching-include"> 묶음·PPT에 포함</label><label><input type="checkbox" id="teaching-intro"> 주제 제목 카드 추가</label><button class="btn" id="teaching-pack">원본·강조·확대 PNG 묶음</button><button class="btn" id="teaching-ppt">강의 스토리 PPT</button></div>
+    <div class="teaching-workspace">
+      <div class="card teaching-editor">
+        <h3>자료와 출처</h3><label>자료 종류<select id="teaching-kind"></select></label>
+        <label>기존 삽화 선택<select id="teaching-shot"></select></label>
+        <div class="row"><label class="btn">사진·자료 넣기<input type="file" id="teaching-file" accept="image/png,image/jpeg,image/webp" hidden></label><button class="btn" id="teaching-remove">불러온 사진 해제</button></div>
+        <p class="small" id="teaching-origin"></p>
+        <a id="teaching-search" class="btn" target="_blank" rel="noopener noreferrer">Wikimedia 자료 찾기 ↗</a><p class="small">검색 결과에서 자료와 이용 조건을 확인한 뒤 파일을 넣으세요. 이미지를 자동으로 가져오지는 않습니다.</p>
+        <label>출처 · 소장처 · 제작자<input type="text" id="teaching-credit" maxlength="300" placeholder="예: 국립박물관 · 유물명 · 자료 번호"></label>
+        <label>원문 또는 자료 주소<input type="text" id="teaching-url" maxlength="1500" placeholder="https://…"></label><a id="teaching-source-link" target="_blank" rel="noopener noreferrer" hidden>기록한 출처 열기 ↗</a>
+        <label>이용 조건<input type="text" id="teaching-rights" maxlength="300" placeholder="라이선스·직접 촬영·별도 허락 등"></label><label><input type="checkbox" id="teaching-checked"> 출처와 이용 조건을 직접 확인했습니다</label>
+        <label>인용문<textarea id="teaching-quote" maxlength="2000" placeholder="검은 화면에 보여 줄 인용문"></textarea></label>
+        <label>아래 설명 문구<input type="text" id="teaching-caption" maxlength="180" placeholder="시청자가 기억할 한 문장"></label>
+        <details><summary>이 구간의 원고</summary><p id="teaching-narration" class="small"></p></details>
+      </div>
+      <div class="card teaching-preview">
+        <div class="row"><h3>화면 미리보기</h3><select id="teaching-view" aria-label="미리보기 종류"><option value="base">원본</option><option value="marked" selected>강조본</option><option value="zoom">확대본</option><option value="layout">강사·자막 배치</option></select></div>
+        <canvas id="teaching-canvas" width="1920" height="1080" aria-label="자료 미리보기. 아래 도구를 고르고 마우스나 손가락으로 끌어 표시하세요."></canvas>
+        <p class="small">원본·강조본에서 도구를 골라 끌어 표시하세요. 배치 화면의 강사 자리는 안내용이며, 자료 PNG에는 들어가지 않습니다.</p>
+        <div class="row teaching-tools"><label>도구 <select id="teaching-tool"><option value="circle">원</option><option value="arrow">화살표</option><option value="line">밑줄</option><option value="highlight">형광펜</option><option value="box">사각형</option><option value="crop">확대 영역</option></select></label><button class="btn" id="teaching-undo">표시 되돌리기</button><button class="btn" id="teaching-clear">표시 초기화</button></div>
+        <details class="teaching-coordinates"><summary>끌기 대신 숫자로 표시하기</summary><p class="small">화면 왼쪽 위가 0%, 오른쪽 아래가 100%입니다.</p><div class="row"><label>시작 X<input id="teaching-x" type="number" min="0" max="100" value="20"></label><label>시작 Y<input id="teaching-y" type="number" min="0" max="100" value="20"></label><label>끝 X<input id="teaching-x2" type="number" min="0" max="100" value="60"></label><label>끝 Y<input id="teaching-y2" type="number" min="0" max="100" value="60"></label><button class="btn" id="teaching-add">표시 추가</button></div></details>
+        <div class="row"><button class="btn primary" id="teaching-png">현재 자료 PNG 저장</button><button class="btn" data-go="shots">삽화 만들기·다시 그리기</button></div>
+        <p id="teaching-status" class="status" role="status" aria-live="polite"></p>
+      </div>
+    </div>
+  </div>
+</section>
 <section class="tab" id="tab-source">
   <h2>소스 넣기</h2>
   <p class="lead">교과서 본문, 사료 번역문, 논문 요약, 내 강의 메모 등을 붙여 넣으세요. 텍스트 파일(.txt, .md)은 글로 들어가고,
@@ -597,6 +630,8 @@ table.places input{ width:100%; padding:4px 6px; }
 <script src="assets/materials.js"></script>
 <script src="assets/materials-ui.js"></script>
 <script src="assets/codex-cli.js"></script>
+<script src="assets/teaching.js"></script>
+<script src="assets/teaching-ui.js"></script>
 <script src="assets/ui.js"></script>
 </body>
 </html>

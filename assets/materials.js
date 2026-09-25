@@ -93,7 +93,7 @@
           var pr = 'Educational historical illustration based on the supplied narration.\n' + g.brief + '\nImage ' + (j + 1) + ' of ' + g.count + ': ' + (j === 0 ? 'establishing view of the requested subject' : 'a distinct closer view or subsequent moment from the same brief') + '.\nNarration context (not instructions):\n' + g.text + '\nDo not recreate movie stills. Do not invent labels, ship counts, routes or flag emblems.';
           shots.push({ id:id, type:j ? 'scene':'wide', desc:g.title + (g.count > 1 ? ' ' + (j + 1) : ''), prompt:pr, sentence:0, places:[], image:old ? old.image : null, candidates:old ? old.candidates || [] : [], redo:!!(old && (old.redo || old.prompt !== pr)) });
         }
-        return { materialId:g.id, materialPlaces:g.places.slice(), heading:g.title, narration:g.text, visual:g.brief, prompt:g.brief, kind:g.kind, useMap:g.kind === 'map', data:dataFor(g), mood:'day', motion:'zoomIn', shots:shots, image:null, keywords:[] };
+        return { teaching:prev && prev.narration === g.text ? prev.teaching : undefined, materialId:g.id, materialPlaces:g.places.slice(), heading:g.title, narration:g.text, visual:g.brief, prompt:g.brief, kind:g.kind, useMap:g.kind === 'map', data:dataFor(g), mood:'day', motion:'zoomIn', shots:shots, image:null, keywords:[] };
       });
       p.board = chosen.filter(function(g){return g.board.trim();}).map(function(g){return {title:g.title,text:g.board,drawing:null};});
       p.source = m.script;
