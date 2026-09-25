@@ -22,7 +22,7 @@
   Array.prototype.forEach.call(document.querySelectorAll('[data-go]'), function(b){ b.addEventListener('click', function(){ show(b.dataset.go); }); });
 
   function render(tab){
-    ({ source: renderSource, script: renderScript, video: renderVideo, story: renderStory, map: renderMap, board: renderBoard, chalk: renderChalk, upload: HS.renderUpload, lesson: HS.renderLesson, settings: renderSettings })[tab]();
+    ({ source: renderSource, script: renderScript, video: renderVideo, story: renderStory, map: renderMap, board: renderBoard, chalk: renderChalk, upload: HS.renderUpload, lesson: HS.renderLesson, shots: HS.renderShots, settings: renderSettings })[tab]();
   }
   HS.onChange(function(what){ if(what === 'all') { $('proj-title').value = P().title || ''; render(current); drawProjects(); } });
 
@@ -570,7 +570,7 @@
   var REGION_COLORS = ['#b8322a', '#2f6db3', '#3c8d5a', '#b07a1f', '#7d4bb3'];
   function renderMap(){
     var m = P().map;
-    $('map-style').value = P().mapStyle || 'old';
+    $('map-style').value = P().mapStyle || 'illust';
     $('map-regions').innerHTML = (m.regions || []).map(function(r, i){
       return '<div class="region" data-i="' + i + '"><input type="color" data-k="color" value="' + HS.esc(r.color || '#b8322a') + '"><input type="text" data-k="name" value="' + HS.esc(r.name) + '"><span class="small">' + r.points.length + '점</span><button class="btn" data-act="del" style="padding:2px 8px">✕</button></div>';
     }).join('') || '<p class="small">영역이 없습니다.</p>';

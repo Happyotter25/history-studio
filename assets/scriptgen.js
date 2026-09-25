@@ -85,7 +85,7 @@
       '  - heading: 장면 제목 (15자 안팎).',
       '  - narration: 소리 내어 읽을 내레이션. 문장은 짧게, 숫자와 연도는 읽기 쉽게.',
       '  - visual: 화면에 보일 삽화 설명 (한국어, 인물·장소·구도·분위기).',
-      '  - prompt: 이미지 생성 도구에 넣을 영어 프롬프트. 시대 고증(복식, 건축, 무기)을 구체적으로, 스타일은 "Korean history webtoon illustration, soft painterly" 로 통일하고, 글자나 워터마크를 넣지 말라고 적는다.',
+      '  - prompt: 이미지 생성 도구에 넣을 영어 프롬프트. 시대 고증(복식, 건축, 무기)을 구체적으로, 화풍 말은 넣지 않는다(🎨 이미지 탭의 화풍이 붙는다).',
       '  - mood: ' + MOODS.join('|') + ' 가운데 하나.',
       '  - motion: 카메라 움직임 ' + MOTIONS.join('|') + ' 가운데 하나. 이웃 장면끼리 겹치지 않게.',
       '  - caption: 화면 왼쪽 위에 띄울 짧은 이름표. "1592년 4월 · 부산"처럼 연도·장소, 또는 "이순신 (1545~1598)"처럼 처음 나오는 인물. 20자 이내, 없으면 빈 문자열.',
@@ -236,7 +236,7 @@
       scenes.push({
         heading: headingOf(chunk[0]), narration: text,
         visual: headingOf(chunk[0]) + ' 장면을 그린 삽화',
-        prompt: 'Korean history webtoon illustration, soft painterly, ' + headingOf(chunk[0]) + ', historically accurate costume and architecture, no text, no watermark',
+        prompt: 'Depict this moment from Korean history: ' + chunk[0],
         mood: guessMood(text), motion: MOTIONS[scenes.length % MOTIONS.length], caption: captionOf(text), keywords: keywordsOf(text), image: null
       });
     }

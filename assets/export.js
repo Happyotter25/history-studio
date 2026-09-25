@@ -11,8 +11,11 @@
   // 장면 한 컷 (그림이 있으면 그림, 없으면 분위기 배경)
   HS.sceneStill = function(scene, w, h){
     var c = canvas(w, h), ctx = c.getContext('2d'), img = HS.sceneImage(scene), layers = !img && HS.sceneLayers(scene);
+    var shotImg = !HS.isDataScene(scene) && HS.firstShotImage(scene) && HS.sceneImage({ image: HS.firstShotImage(scene) });
     if(HS.isDataScene(scene)) HS.drawDataScene(ctx, w, h, scene, 1);
-    else if(scene.useMap && HS.project.map.places.length) HS.drawMap(ctx, w, h, HS.project.map, { style: HS.project.mapStyle || 'old' });
+    else if(shotImg){ var q = Math.max(w / shotImg.width, h / shotImg.height); ctx.drawImage(shotImg, (w - shotImg.width * q) / 2, (h - shotImg.height * q) / 2, shotImg.width * q, shotImg.height * q); }
+    else if(scene.shots && scene.shots.length && HS.readyShots(scene).length) HS.drawShots(ctx, w, h, scene, 0);
+    else if(scene.useMap && HS.project.map.places.length) HS.drawMap(ctx, w, h, HS.project.map, { style: HS.project.mapStyle || 'illust' });
     else if(layers) HS.drawLayers(ctx, w, h, layers, 'zoomIn', 0);
     else if(img){
       var s = Math.max(w / img.width, h / img.height);
@@ -63,7 +66,7 @@
       // 지도
       if(opt.map !== false && p.map.places.length){
         var mc = canvas(1600, 900);
-        HS.drawMap(mc.getContext('2d'), 1600, 900, p.map, { style: opt.mapStyle || 'old' });
+        HS.drawMap(mc.getContext('2d'), 1600, 900, p.map, { style: opt.mapStyle || 'illust' });
         var ms = pptx.addSlide();
         ms.addImage({ data: mc.toDataURL('image/jpeg', 0.9), x: 0, y: 0, w: W, h: H });
         ms.addNotes(p.map.routes.map(function(r){ return r.from + ' → ' + r.to + (r.label ? ' : ' + r.label : ''); }).join('\n'));

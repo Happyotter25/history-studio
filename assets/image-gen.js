@@ -78,6 +78,8 @@
   // 장면 하나의 그림을 만듭니다: 대본의 영어 프롬프트(없으면 화면 설명)에 화풍 안내를 붙입니다
   HS.scenePrompt = function(s){
     var p = HS.project, base = s.prompt || s.visual || s.heading;
+    // 🎨 이미지 탭의 화풍·등장인물 설정을 함께 씁니다
+    if(HS.shotPrompt) return HS.shotPrompt({ prompt: base + '\nContext: ' + (p.title || '') + ' — ' + s.heading + '. Mood: ' + (s.mood || 'day') + '.', desc: s.visual || '' });
     return base + '\n\nContext: ' + (p.title || '') + ' — ' + s.heading + '. Mood: ' + (s.mood || 'day') + '.\n' + STYLE +
       (p.aspect === '9:16' ? ' Vertical 9:16 composition with the subject in the center.' : ' Wide 16:9 composition.');
   };

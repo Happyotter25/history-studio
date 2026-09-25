@@ -16,14 +16,21 @@
     }
     return c.ok ? c.img : null;
   };
+  // 이미지 한 장이 다 읽힐 때까지 기다리는 약속
+  function whenLoaded(url){
+    if(!url) return null;
+    HS.sceneImage({ image: url });
+    var c = imgCache[url];
+    return c.ok ? null : new Promise(function(ok){ c.img.addEventListener('load', ok); c.img.addEventListener('error', ok); });
+  }
   HS.preloadImages = function(){
-    return Promise.all([HS.preloadCharacters ? HS.preloadCharacters() : null].concat(HS.project.scenes.map(function(s){
-      if(s.svg) return HS.sceneLayersReady(s);
-      if(!s.image) return null;
-      HS.sceneImage(s);
-      var c = imgCache[s.image];
-      return c.ok ? null : new Promise(function(ok){ c.img.addEventListener('load', ok); c.img.addEventListener('error', ok); });
-    })));
+    var jobs = [HS.preloadCharacters ? HS.preloadCharacters() : null];
+    HS.project.scenes.forEach(function(s){
+      (s.shots || []).forEach(function(sh){ jobs.push(whenLoaded(sh.image)); });
+      if(s.svg) jobs.push(HS.sceneLayersReady(s));
+      jobs.push(whenLoaded(s.image));
+    });
+    return Promise.all(jobs);
   };
 
   // 목소리가 있으면 목소리 길이에, 없으면 글자 수에 맞춥니다
@@ -48,6 +55,12 @@
     return [(w - dw) * ox, (h - dh) * oy, dw, dh];
   }
 
+  HS.motionRect = motionRect;
+  function vignette(ctx, w, h){
+    var v = ctx.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.35, w / 2, h / 2, Math.hypot(w, h) * 0.6);
+    v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, 'rgba(0,0,0,.45)');
+    ctx.fillStyle = v; ctx.fillRect(0, 0, w, h);
+  }
   function drawSceneFrame(ctx, w, h, s, k, local){
     var img = HS.sceneImage(s), layers = !img && HS.sceneLayers(s);
     if(HS.isDataScene(s)){
@@ -55,9 +68,14 @@
       HS.drawDataScene(ctx, w, h, s, Math.min(1, k * 1.25));
       return;
     }
+    // 샷이 준비된 장면: 내레이션 문장에 맞춰 그림이 바뀝니다
+    if(s.shots && s.shots.length){
+      var dur = HS.sceneDuration(s), lead = s.audio ? HS.VOICE_LEAD : FADE * 0.5, span = s.audio && s.audioDur ? s.audioDur : dur - FADE;
+      if(HS.drawShots(ctx, w, h, s, Math.max(0, Math.min(1, (local - lead) / span)))){ vignette(ctx, w, h); return; }
+    }
     if(s.useMap && HS.project.map.places.length){
       // 지도 장면: 장면이 흐르는 동안 경로가 그려집니다
-      HS.drawMap(ctx, w, h, HS.project.map, { style: HS.project.mapStyle || 'old', progress: Math.min(1, k * 1.3) });
+      HS.drawMap(ctx, w, h, HS.project.map, { style: HS.project.mapStyle || 'illust', progress: Math.min(1, k * 1.3) });
     } else if(layers){
       HS.drawLayers(ctx, w, h, layers, s.motion, k);
     } else if(img){
@@ -72,10 +90,7 @@
       HS.drawSceneArt(ctx, w, h, s, local);
       ctx.restore();
     }
-    // 가장자리 어둡게
-    var v = ctx.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.35, w / 2, h / 2, Math.hypot(w, h) * 0.6);
-    v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, 'rgba(0,0,0,.45)');
-    ctx.fillStyle = v; ctx.fillRect(0, 0, w, h);
+    vignette(ctx, w, h); // 가장자리 어둡게
   }
 
   // 자막 덩어리: 문장을 화면 폭에 맞춰 두 줄 이하로 나눕니다 (화면 자막과 SRT 가 같은 기준을 씁니다)

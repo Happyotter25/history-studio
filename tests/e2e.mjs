@@ -59,6 +59,16 @@ const LESSON_ANSWER = { goals: ['명량 해전의 전개를 설명할 수 있다
     { type: 'ox', question: '명량은 물살이 느리다.', choices: ['O', 'X'], answer: 'X', explain: '빠르다.', scene: 2 },
     { type: 'short', question: '해전이 벌어진 해협 이름은?', choices: [], answer: '울돌목', explain: '명량.', scene: 2 }],
   summary: '[[1597년]], 조선 수군은 [[13척]]으로 [[울돌목]]에서 싸웠다.', activity: { title: '작전 회의', steps: ['지도를 본다', '작전을 짠다'] }, discussion: ['숫자와 지형 중 무엇이 더 중요했을까?'] };
+const SHOTS_ANSWER = {
+  cast: [{ name: '이순신', look: '50s Joseon admiral, stern face, neat black beard, dark red armor' }],
+  shots: [
+    { scene: 1, sentence: 0, type: 'wide', desc: '해 질 녘 울돌목 전경', prompt: 'Wide view of Myeongnyang strait at dusk, whirlpools', places: [] },
+    { scene: 2, sentence: 0, type: 'map', desc: '명량의 위치', prompt: '', places: ['명량'] },
+    { scene: 3, sentence: 0, type: 'scene', desc: '이순신이 지휘하는 모습', prompt: 'Yi Sun-sin (이순신) commanding from the deck of a panokseon', places: [] },
+    { scene: 3, sentence: 1, type: 'closeup', desc: '판옥선의 화포', prompt: 'Close-up of a Joseon cannon on a panokseon deck', places: [] },
+    { scene: 9, sentence: 0, type: 'wide', desc: '없는 장면', prompt: 'x', places: [] }
+  ]
+};
 function answerFor(body) {
   const sys = typeof body.system === 'string' ? body.system : JSON.stringify(body.system);
   if (sys.includes('삽화가')) return SVG_ANSWER;
@@ -66,6 +76,7 @@ function answerFor(body) {
   if (sys.includes('사실 확인 담당')) return CHECK_ANSWER;
   if (sys.includes('업로드 정보')) return UPLOAD_ANSWER;
   if (sys.includes('수업 설계자')) return LESSON_ANSWER;
+  if (sys.includes('미술 감독')) return SHOTS_ANSWER;
   return AI_ANSWER;
 }
 
@@ -276,7 +287,7 @@ await test('AI 대본에 지도 장면과 영역이 들어오고, 지도 장면�
   const same = await ai.evaluate(() => {
     const a = HS.sceneStill(HS.project.scenes[1], 320, 180).toDataURL();
     const m = document.createElement('canvas'); m.width = 320; m.height = 180;
-    HS.drawMap(m.getContext('2d'), 320, 180, HS.project.map, { style: HS.project.mapStyle || 'old' });
+    HS.drawMap(m.getContext('2d'), 320, 180, HS.project.map, { style: HS.project.mapStyle || 'illust' });
     return a === m.toDataURL();
   });
   assert.ok(same, '지도 장면이 지도로 그려지지 않음');
@@ -789,7 +800,7 @@ await test('한 번에 만들기: 대본부터 수업 자료까지 차례로 만
   await ai.click('#pipe-run');
   await ai.waitForSelector('#pipe-zip:not([hidden])', { timeout: 20000 });
   const log = await ai.textContent('#pipe-log');
-  for (const w of ['대본·판서·지도 완료', '사실 확인 완료', '제목·설명·태그 완료', '수업 자료 완료', '다 만들었습니다']) assert.ok(log.includes(w), w + ' 없음: ' + log);
+  for (const w of ['대본·판서·지도 완료', '이미지 기획(샷) 완료', '사실 확인 완료', '제목·설명·태그 완료', '수업 자료 완료', '다 만들었습니다']) assert.ok(log.includes(w), w + ' 없음: ' + log);
   assert.ok(!log.includes('AI 그림'));
   const p = await ai.evaluate(() => ({ checks: !!HS.project.checks, upload: !!HS.project.upload, lesson: !!HS.project.lesson, scenes: HS.project.scenes.length }));
   assert.deepEqual(p, { checks: true, upload: true, lesson: true, scenes: 3 });
@@ -931,6 +942,102 @@ await test('AI 이미지(Gemini): 세로 쇼츠 비율로 요청하고, 규칙 �
   assert.ok(r.err.includes('이미지 규칙'), r.err);
 });
 
+await test('이미지 기획: Claude가 장면마다 샷과 등장인물 생김새를 짠다', async () => {
+  // 앞 시험에서 바뀐 대본을 AI 대본으로 되돌립니다 (장면 3개: 삽화·지도·삽화)
+  await ai.evaluate(() => HS.generateAI());
+  await ai.evaluate(() => { HS.project.art = { style: 'ink', extra: '', cast: [{ name: '이순신', look: '선생님이 고친 모습' }] }; HS.changed('art'); });
+  await ai.click('#tabs button[data-tab=shots]');
+  await ai.click('#shots-plan');
+  await ai.waitForFunction(() => HS.project.scenes[2].shots && HS.project.scenes[2].shots.length === 2);
+  const r = await ai.evaluate(() => ({ shots: HS.project.scenes.map(s => (s.shots || []).map(x => x.type + ':' + x.sentence)), cast: HS.project.art.cast }));
+  assert.deepEqual(r.shots, [['wide:0'], ['map:0'], ['scene:0', 'closeup:1']]);
+  assert.equal(r.cast.length, 1);
+  assert.equal(r.cast[0].look, '선생님이 고친 모습', '선생님이 고친 인물 설정을 덮어씀');
+  assert.equal(await ai.locator('#shots-board .shot').count(), 4);
+  const last = aiBodies[aiBodies.length - 1];
+  const userText = last.messages[0].content;
+  assert.ok(userText.includes('(1) ') && userText.includes('지명 목록: 명량'), '문장 번호·지명 목록 없음');
+  assert.ok(last.system.includes('수묵 담채'));
+});
+
+await test('이미지 기획: 프롬프트에 화풍·인물 생김새·비율·글자 없음이 자동으로 붙는다', async () => {
+  const pr = await ai.evaluate(() => HS.shotPrompt(HS.project.scenes[2].shots[0]));
+  assert.ok(pr.startsWith('Style: traditional Korean ink-wash'), pr);
+  assert.ok(pr.includes('Yi Sun-sin (이순신) commanding'));
+  assert.ok(pr.includes('이순신 — 선생님이 고친 모습'));
+  assert.ok(pr.includes('Wide 16:9') && /No text/.test(pr));
+  const other = await ai.evaluate(() => HS.shotPrompt(HS.project.scenes[2].shots[1]));
+  assert.ok(!other.includes('선생님이 고친 모습'), '나오지 않는 인물까지 붙음');
+});
+
+await test('이미지 주문서: Codex·ChatGPT용 ZIP에 프롬프트·파일 이름·안내가 들어간다', async () => {
+  const { name, buf } = await download(ai, '#shots-order');
+  assert.match(name, /이미지 주문서\.zip$/);
+  const r = await ai.evaluate(async b64 => {
+    const z = await JSZip.loadAsync(b64, { base64: true });
+    const j = JSON.parse(await z.file('이미지 주문서/prompts.json').async('string'));
+    return { names: Object.keys(z.files), j, codex: await z.file('이미지 주문서/CODEX_PROMPT.txt').async('string'), ids: HS.project.scenes[2].shots.map(x => x.id) };
+  }, buf.toString('base64'));
+  assert.ok(r.names.includes('이미지 주문서/읽어 주세요.md') && r.names.some(n => n.startsWith('이미지 주문서/images/')));
+  assert.equal(r.j.count, 3, '지도 샷은 빼고 3장');
+  assert.deepEqual(r.j.images.map(x => x.file.slice(0, 5)), ['S01-1', 'S03-1', 'S03-2']);
+  assert.equal(r.j.images[1].file, 'S03-1_' + r.ids[0] + '.png');
+  assert.equal(r.j.images[1].size, '1536x1024');
+  assert.ok(r.j.images[1].prompt.includes('Style:'));
+  assert.ok(r.codex.includes('images/S01-1_') && r.codex.includes('3'));
+});
+
+await test('만든 이미지 불러오기: 파일 이름으로 샷을 찾아 붙이고, 문장에 맞춰 그림이 바뀐다', async () => {
+  const mk = color => ai.evaluate(c => { const x = document.createElement('canvas'); x.width = 320; x.height = 180; const g = x.getContext('2d'); g.fillStyle = c; g.fillRect(0, 0, 320, 180); return x.toDataURL('image/png').split(',')[1]; }, color);
+  const ids = await ai.evaluate(() => HS.project.scenes.map(s => (s.shots || []).map(x => x.id)));
+  await ai.setInputFiles('#shots-import', [
+    { name: 'S03-1_' + ids[2][0] + '.png', mimeType: 'image/png', buffer: Buffer.from(await mk('#ff0000'), 'base64') },
+    { name: 'S03-2.png', mimeType: 'image/png', buffer: Buffer.from(await mk('#0000ff'), 'base64') },
+    { name: '엉뚱한이름.png', mimeType: 'image/png', buffer: Buffer.from(await mk('#00ff00'), 'base64') }]);
+  await ai.waitForFunction(() => HS.project.scenes[2].shots.every(x => x.image));
+  assert.match(await ai.textContent('#shots-status'), /2장을 샷에 붙였습니다.*못 붙인 파일 1개/);
+  assert.match(await ai.textContent('#shots-progress'), /3장 가운데 2장/);
+  // 3번 장면: 첫 문장 동안은 빨강, 둘째 문장부터 파랑
+  const px = await ai.evaluate(async () => {
+    await HS.preloadImages();
+    const seg = HS.timeline()[2], c = document.createElement('canvas'); c.width = 320; c.height = 180; const x = c.getContext('2d');
+    const at = t => { HS.drawVideoFrame(x, 320, 180, t, { subs: false }); return Array.from(x.getImageData(160, 90, 1, 1).data).slice(0, 3); };
+    return { early: at(seg.start + 1.2), late: at(seg.start + seg.dur - 1.2) };
+  });
+  assert.ok(px.early[0] > 150 && px.early[2] < 80, '앞은 빨강이어야: ' + px.early);
+  assert.ok(px.late[2] > 150 && px.late[0] < 80, '뒤는 파랑이어야: ' + px.late);
+  // 스토리 PPT·썸네일 장면 그림은 첫 샷 그림
+  const still = await ai.evaluate(() => Array.from(HS.sceneStill(HS.project.scenes[2], 64, 36).getContext('2d').getImageData(32, 18, 1, 1).data));
+  assert.ok(still[0] > 200 && still[2] < 60);
+});
+
+await test('그림 지도 샷: 정한 지명만 그림 지도로 보여 준다', async () => {
+  const r = await ai.evaluate(() => {
+    const s = HS.project.scenes[1], c = document.createElement('canvas'); c.width = 320; c.height = 180; const x = c.getContext('2d');
+    const ok = HS.drawShots(x, 320, 180, s, 0.5); const a = c.toDataURL();
+    HS.drawMap(x, 320, 180, HS.project.map, { style: 'old' }); const b = c.toDataURL();
+    return { ok, differs: a !== b, style: HS.project.mapStyle || 'illust' };
+  });
+  assert.ok(r.ok && r.differs);
+  assert.equal(r.style, 'illust');
+  const t = await ai.evaluate(() => { const c = document.createElement('canvas'); c.width = 1280; c.height = 720; const x = c.getContext('2d');
+    HS.drawMap(x, 1280, 720, HS.project.map, { style: 'illust' }); const t0 = performance.now(); for (let i = 0; i < 5; i++) HS.drawMap(x, 1280, 720, HS.project.map, { style: 'illust', progress: i / 5 }); return (performance.now() - t0) / 5; });
+  assert.ok(t < 60, '그림 지도가 너무 느림 ' + t.toFixed(1) + 'ms');
+});
+
+await test('샷 그림을 이미지 API로 만들 때 화풍·인물이 든 프롬프트를 보낸다', async () => {
+  let req = null;
+  await ai.context().unroute('https://api.openai.com/v1/images/generations');
+  const png = await ai.evaluate(() => { const c = document.createElement('canvas'); c.width = 64; c.height = 36; c.getContext('2d').fillRect(0, 0, 64, 36); return c.toDataURL('image/png').split(',')[1]; });
+  await ai.context().route('https://api.openai.com/v1/images/generations', async route => { req = JSON.parse(route.request().postData()); await route.fulfill({ status: 200, headers: { 'content-type': 'application/json', 'access-control-allow-origin': '*' }, body: JSON.stringify({ data: [{ b64_json: png }] }) }); });
+  await ai.evaluate(() => { HS.saveImageSettings('openai', 'k', ''); HS.project.scenes[0].shots[0].image = null; });
+  await ai.click('#tabs button[data-tab=video]'); await ai.click('#tabs button[data-tab=shots]');
+  await ai.click('#shots-board .shot-scene[data-i="0"] button[data-act=gen]');
+  await ai.waitForFunction(() => !!HS.project.scenes[0].shots[0].image);
+  assert.ok(req.prompt.startsWith('Style: traditional Korean ink-wash') && req.prompt.includes('Myeongnyang strait'));
+  await ai.evaluate(() => HS.saveImageSettings('', '', ''));
+});
+
 await test('그림·목소리가 든 프로젝트가 IndexedDB에 저장되어 다시 열어도 남는다', async () => {
   // 이 시험 안에서 그림과 목소리를 넣습니다 (앞 시험들이 대본을 새로 만들었을 수 있음)
   await ai.evaluate(async () => {
@@ -996,10 +1103,23 @@ await test('참고 영상 스크립트만 있어도 간이 방식으로 대본�
   await pg.context().close();
 });
 
+await test('이미지 기획(키 없이): 장면 설명으로 샷을 짜고, 지명이 나오면 그림 지도 샷을 넣는다', async () => {
+  const pg = await open();
+  await pg.click('#src-sample'); await pg.click('#btn-generate');
+  await pg.click('#tabs button[data-tab=shots]');
+  await pg.click('#shots-plan');
+  await pg.waitForFunction(() => HS.project.scenes[1].shots && HS.project.scenes[1].shots.length > 0);
+  const r = await pg.evaluate(() => HS.project.scenes.map(s => (s.shots || []).map(x => x.type + (x.places.length ? '(' + x.places.join('·') + ')' : '')).join(',')));
+  assert.ok(r.some(x => x.includes('map(')), JSON.stringify(r));
+  assert.equal(r[r.length - 1], '', '연표 장면에는 샷이 없어야 함');
+  assert.match(await pg.textContent('#shots-status'), /간단히 짰습니다/);
+  await pg.context().close();
+});
+
 await test('휴대폰 폭에서 가로로 넘치지 않는다', async () => {
   const pg = await open({ width: 375, height: 800 });
   await pg.click('#src-sample'); await pg.click('#btn-generate');
-  for (const t of ['source', 'script', 'video', 'story', 'map', 'board', 'chalk', 'upload', 'lesson', 'settings']) {
+  for (const t of ['source', 'script', 'shots', 'video', 'story', 'map', 'board', 'chalk', 'upload', 'lesson', 'settings']) {
     await pg.click(`#tabs button[data-tab=${t}]`);
     const over = await pg.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
     assert.ok(over <= 0, t + ' 탭이 ' + over + 'px 넘침');

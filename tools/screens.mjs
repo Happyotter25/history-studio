@@ -28,6 +28,14 @@ await pg.evaluate(() => { HS.uploadSimple(); HS.project.thumb = { scene: 3, main
 await pg.click('#tabs button[data-tab=upload]'); await pg.waitForTimeout(400);
 await pg.screenshot({ path: path.join(root, 'docs/upload.png') });
 await pg.locator('#thumb-canvas').screenshot({ path: path.join(root, 'docs/thumbnail.png') });
+// 이미지 기획 탭 (샷 보드) — 한 샷에는 그림을 넣어 둡니다
+await pg.click('#tabs button[data-tab=shots]'); await pg.click('#shots-plan');
+await pg.waitForFunction(() => HS.project.scenes[1].shots && HS.project.scenes[1].shots.length);
+await pg.evaluate(() => { HS.project.art.cast = [{ name: '이순신', look: '50s Joseon admiral, stern face, neat black beard, dark red armor' }];
+  const c = document.createElement('canvas'); c.width = 640; c.height = 360; HS.drawSceneArt(c.getContext('2d'), 640, 360, { heading: 'x', mood: 'war' }, 0);
+  HS.project.scenes[2].shots[0].image = c.toDataURL('image/jpeg'); HS.changed('all'); });
+await pg.click('#tabs button[data-tab=script]'); await pg.click('#tabs button[data-tab=shots]'); await pg.waitForTimeout(500);
+await pg.screenshot({ path: path.join(root, 'docs/shots.png') });
 await pg.evaluate(() => HS.generateLessonSimple());
 await pg.click('#tabs button[data-tab=lesson]'); await pg.waitForTimeout(600);
 await pg.screenshot({ path: path.join(root, 'docs/lesson.png') });

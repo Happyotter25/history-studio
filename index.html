@@ -86,6 +86,14 @@ table.places input{ width:100%; padding:4px 6px; }
 .ref{ border:1px solid var(--line); border-radius:8px; padding:10px; margin-top:8px; background:var(--bg); }
 .ref textarea{ min-height:110px; font-size:13px; }
 .kind-edit textarea, .kind-edit input{ font-size:13px; }
+.shot-scene{ border:1px solid var(--line); border-radius:var(--radius); padding:10px; margin-bottom:10px; background:var(--panel); }
+.shot-grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(250px,1fr)); gap:10px; margin-top:8px; }
+.shot{ border:1px solid var(--line); border-radius:8px; padding:6px; background:var(--bg); display:flex; flex-direction:column; gap:5px; }
+.shot canvas{ width:100%; border-radius:6px; }
+.shot select{ max-width:48%; font-size:12px; padding:3px; }
+.shot input[type=text], .shot textarea{ width:100%; font-size:12px; padding:5px 7px; }
+.shot textarea{ min-height:70px; }
+.cast{ margin-top:6px; }
 .check{ border-left:4px solid var(--line); padding:6px 10px; margin:6px 0; background:var(--bg); border-radius:6px; font-size:14px; }
 .check.wrong{ border-color:#c0392b; } .check.unsupported{ border-color:#d68910; } .check.debated{ border-color:#7d6bb3; } .check.ok{ border-color:#3c8d5a; }
 .check q{ display:block; color:var(--muted); font-size:13px; margin-top:2px; }
@@ -108,6 +116,7 @@ table.places input{ width:100%; padding:4px 6px; }
 <nav id="tabs">
   <button data-tab="source" class="on">① 소스</button>
   <button data-tab="script">② 대본</button>
+  <button data-tab="shots">🎨 이미지</button>
   <button data-tab="video">③ 삽화 영상</button>
   <button data-tab="story">④ 스토리 PPT</button>
   <button data-tab="map">⑤ 지도</button>
@@ -167,6 +176,7 @@ table.places input{ width:100%; padding:4px 6px; }
   </div>
   <div class="steps">
     <button data-go="script"><b>② 대본</b><span>장면별 내레이션과 삽화 설명 다듬기</span></button>
+    <button data-go="shots"><b>🎨 이미지</b><span>대본에 맞춰 장면마다 그림 여러 장 기획 · Codex·ChatGPT용 주문서</span></button>
     <button data-go="video"><b>③ 삽화 영상</b><span>장면 그림에 움직임·자막을 넣어 WebM으로</span></button>
     <button data-go="story"><b>④ 스토리 PPT</b><span>장면을 슬라이드로, 내레이션은 발표자 노트로</span></button>
     <button data-go="map"><b>⑤ 지도</b><span>지명과 이동 경로를 옛 지도 풍으로</span></button>
@@ -189,6 +199,44 @@ table.places input{ width:100%; padding:4px 6px; }
   </div>
   <div class="card" id="check-panel" hidden></div>
   <div id="scene-list"></div>
+</section>
+
+<section class="tab" id="tab-shots">
+  <h2>이미지 기획</h2>
+  <p class="lead">장면마다 보여 줄 그림(샷)을 1~3장 정하고, 내레이션 문장에 맞춰 바뀌게 합니다. 모든 그림이 같은 화풍·같은 인물 모습이 되도록 프롬프트에 자동으로 넣습니다.
+    지명이 나오는 곳은 <b>그림 지도</b> 샷으로 정확한 지도를 보여 줍니다.</p>
+  <div class="grid2">
+    <div class="card">
+      <b>화풍과 등장인물</b>
+      <div class="row" style="margin-top:8px">
+        <label class="inline">화풍 <select id="art-style"></select></label>
+        <input type="text" id="art-extra" placeholder="덧붙일 화풍 설명 (영어, 선택: warm autumn palette…)" style="flex:1;min-width:160px">
+      </div>
+      <div style="margin-top:10px"><b class="small">등장인물 설정집</b> <span class="small">같은 인물이 그림마다 같은 모습이 되게 합니다</span></div>
+      <div id="cast-list"></div>
+      <button class="btn" id="cast-add" style="margin-top:6px">인물 더하기</button>
+    </div>
+    <div class="card">
+      <b>그림 만들기</b>
+      <div class="row" style="margin-top:8px">
+        <button class="btn primary" id="shots-plan">① 이미지 기획 (샷 짜기)</button>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <button class="btn primary" id="shots-order">② 이미지 주문서 받기 (Codex·ChatGPT용)</button>
+        <label class="inline"><input type="checkbox" id="shots-order-all"> 이미 있는 그림도 포함</label>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <label class="btn primary">③ 만든 이미지 불러오기<input type="file" id="shots-import" accept="image/*" multiple hidden></label>
+        <label class="btn">폴더째 불러오기<input type="file" id="shots-import-dir" webkitdirectory multiple hidden></label>
+        <button class="btn" id="shots-gen-all" hidden>API로 남은 그림 모두 생성</button>
+      </div>
+      <p class="small">주문서(ZIP)를 풀고 그 폴더에서 Codex를 실행해 안내문을 붙여 넣으면, 파일 이름대로 그림이 저장됩니다. 그 그림들을 ③으로 한꺼번에 불러오면 샷에 자동으로 붙습니다.
+        ChatGPT 앱이면 샷마다 "프롬프트 복사" → 그림 받기 → "파일 넣기"로 해도 됩니다.</p>
+      <div class="row"><b id="shots-progress" class="small"></b></div>
+      <span class="status" id="shots-status"></span>
+    </div>
+  </div>
+  <div id="shots-board"></div>
 </section>
 
 <section class="tab" id="tab-video">
@@ -261,7 +309,7 @@ table.places input{ width:100%; padding:4px 6px; }
     <div class="card">
       <canvas id="map-canvas" width="1280" height="720"></canvas>
       <div class="row" style="margin-top:8px">
-        <label class="inline">양식 <select id="map-style"><option value="old">옛 지도</option><option value="modern">깔끔한 지도</option><option value="board">칠판</option></select></label>
+        <label class="inline">양식 <select id="map-style"><option value="illust">그림 지도</option><option value="old">옛 지도</option><option value="modern">깔끔한 지도</option><option value="board">칠판</option></select></label>
         <button class="btn" id="map-fit">지명에 맞추기</button>
         <button class="btn" id="map-png">PNG 받기</button>
         <button class="btn primary" id="map-record">경로 영상 녹화</button>
@@ -460,9 +508,11 @@ table.places input{ width:100%; padding:4px 6px; }
 <script src="assets/video.js"></script>
 <script src="assets/chalk.js"></script>
 <script src="assets/export.js"></script>
+<script src="assets/shots.js"></script>
 <script src="assets/upload.js"></script>
 <script src="assets/lesson.js"></script>
 <script src="assets/package.js"></script>
+<script src="assets/shots-ui.js"></script>
 <script src="assets/ui.js"></script>
 </body>
 </html>

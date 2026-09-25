@@ -34,6 +34,8 @@
     return HS.preloadImages().then(function(){
       step('장면 그림 넣는 중');
       var fs = HS.frameSize(), pics = root.folder('장면 그림');
+      var shotJobs = [];
+      p.scenes.forEach(function(s, i){ (s.shots || []).forEach(function(sh, j){ if(sh.image) shotJobs.push(pics.file(pad2(i + 1) + '-' + (j + 1) + ' ' + safe(sh.desc || s.heading) + '.jpg', dataUrlBytes(sh.image))); }); });
       return Promise.all(p.scenes.map(function(s, i){
         return canvasBlob(HS.sceneStill(s, fs[0] * 1.5, fs[1] * 1.5), 'image/jpeg').then(function(b){ pics.file(pad2(i + 1) + ' ' + safe(s.heading) + '.jpg', b); });
       }));
@@ -45,7 +47,7 @@
       var jobs = [canvasBlob(th).then(function(b){ root.file('썸네일.png', b); })];
       if(p.map.places.length){
         var m = document.createElement('canvas'); m.width = 1920; m.height = 1080;
-        HS.drawMap(m.getContext('2d'), 1920, 1080, p.map, { style: p.mapStyle || 'old' });
+        HS.drawMap(m.getContext('2d'), 1920, 1080, p.map, { style: p.mapStyle || 'illust' });
         jobs.push(canvasBlob(m).then(function(b){ root.file('지도.png', b); }));
       }
       return Promise.all(jobs);
@@ -81,8 +83,16 @@
   /* ── 한 번에 만들기 ─────────────────────────────────── */
   var STEPS = [
     { id: 'script', label: '대본·판서·지도', ai: 300, run: function(ai, say){ return ai ? HS.generateAI(say) : Promise.resolve().then(HS.generateSimple); } },
+    { id: 'shots', label: '이미지 기획(샷)', ai: 150, run: function(ai, say){ return ai ? HS.planShotsAI(say) : Promise.resolve().then(HS.planShotsSimple); } },
     { id: 'art', label: '빈 장면 AI 그림', aiOnly: true, perScene: 200, run: function(ai, say, ctl){
       var img = HS.imageOn();
+      // 샷이 있고 이미지 키가 있으면 샷 그림을 만듭니다
+      var shots = img ? HS.pendingShots(false) : [];
+      if(shots.length){ var n = 0; return (function nextShot(){
+        if(ctl.stopped || n >= shots.length) return Promise.resolve();
+        var x = shots[n++]; say('#' + (x.si + 1) + '-' + (x.sj + 1) + ' (' + n + '/' + shots.length + ')');
+        return HS.generateShotImage(x.sh).then(nextShot);
+      })(); }
       var todo = P().scenes.map(function(s, i){ return (!s.image && !s.svg && HS.needsPicture(s)) ? i : -1; }).filter(function(i){ return i >= 0; }), k = 0;
       return (function next(){
         if(ctl.stopped || k >= todo.length) return Promise.resolve();
@@ -149,6 +159,8 @@
     }
     HS.runPipeline(chosen(), log).then(function(r){
       $('pipe-log').insertAdjacentHTML('beforeend', '<div><b>' + (r.stopped ? '멈췄습니다. 여기까지 만든 것은 남아 있습니다.' : '다 만들었습니다! 탭을 돌아보며 다듬고, 아래에서 모두 받으세요.') + '</b></div>');
+      var st = HS.shotStats();
+      if(st.total > st.done) $('pipe-log').insertAdjacentHTML('beforeend', '<div class="small">그림 ' + (st.total - st.done) + '장이 남았습니다. 🎨 이미지 탭에서 <b>이미지 주문서</b>를 받아 Codex·ChatGPT로 만든 뒤 불러오세요.</div>');
       $('pipe-zip').hidden = false;
     }).catch(function(e){
       $('pipe-log').insertAdjacentHTML('beforeend', '<div class="status err">' + HS.esc(HS.whyFail(e)) + '</div>');

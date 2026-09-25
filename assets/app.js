@@ -31,7 +31,8 @@
       bgm: null,    // 배경음악 {name, data(dataURL), dur, volume, duck}
       lesson: null, // 수업 자료 {goals, quiz, summary, activity, discussion}
       aspect: '16:9', // 영상 화면 비율 ('16:9' | '9:16' 쇼츠)
-      characters: [] // 내 캐릭터 {id, name, image(PNG dataURL), w, h}
+      characters: [], // 내 캐릭터 {id, name, image(PNG dataURL), w, h}
+      art: { style: 'webtoon', extra: '', cast: [] } // 이미지 화풍과 등장인물 설정집
     };
   };
   HS.project = HS.blankProject();
